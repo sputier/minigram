@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import type { MockChat } from '../data/mockData'
+import type { UiChat } from '../types/telegram'
 
 interface SidebarProps {
-  chats: MockChat[]
-  activeChatId: number
+  chats: UiChat[]
+  activeChatId: number | undefined
   onSelectChat: (id: number) => void
 }
 

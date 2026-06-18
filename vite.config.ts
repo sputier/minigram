@@ -9,14 +9,24 @@ export default defineConfig({
     react(),
     electron({
       main: {
-        entry: 'electron/main.ts',
+        // Pas de champ `entry` ici : vite-plugin-electron l'utilise pour
+        // activer son mode "build.lib", qui impose `formats: ['es']` quand
+        // package.json a "type": "module" et ignore notre `output.format`
+        // ci-dessous. En passant l'entrée via `rollupOptions.input` à la
+        // place, on reste sur un build Rollup classique qu'on contrôle
+        // entièrement (comme pour preload, qui fonctionne déjà ainsi).
         vite: {
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
+              input: path.join(__dirname, 'electron/main.ts'),
               output: {
                 format: 'cjs',
-                entryFileNames: 'main.js',
+                // .cjs (et non .js) car package.json a "type": "module" :
+                // sans ça Node charge ce bundle CJS comme un module ES et
+                // `__dirname`/`require`, utilisés par le chargeur d'addon
+                // natif de tdl, n'existent plus.
+                entryFileNames: 'main.cjs',
               },
             },
           },
@@ -30,7 +40,7 @@ export default defineConfig({
             rollupOptions: {
               output: {
                 format: 'cjs',
-                entryFileNames: 'preload.js',
+                entryFileNames: 'preload.cjs',
               },
             },
           },

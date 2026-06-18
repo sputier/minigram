@@ -1,27 +1,25 @@
 import { useEffect, useRef, useState } from 'react'
-import type { MockChat, MockMessage } from '../data/mockData'
+import type { UiChat, UiMessage } from '../types/telegram'
 
 interface ChatViewProps {
-  chat: MockChat | undefined
+  chat: UiChat | undefined
+  messages: UiMessage[]
+  onSend: (text: string) => void
+  emptyMessage: string
 }
 
-export default function ChatView({ chat }: ChatViewProps) {
+export default function ChatView({ chat, messages, onSend, emptyMessage }: ChatViewProps) {
   const [draft, setDraft] = useState('')
-  const [localMessages, setLocalMessages] = useState<MockMessage[]>(chat?.messages ?? [])
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setLocalMessages(chat?.messages ?? [])
-  }, [chat])
-
-  useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [localMessages])
+  }, [messages])
 
   if (!chat) {
     return (
-      <div className="flex h-full flex-1 items-center justify-center bg-tg-bg text-tg-muted">
-        Sélectionne une discussion
+      <div className="flex h-full flex-1 items-center justify-center bg-tg-bg text-center text-tg-muted">
+        {emptyMessage}
       </div>
     )
   }
@@ -29,15 +27,7 @@ export default function ChatView({ chat }: ChatViewProps) {
   function handleSend() {
     const text = draft.trim()
     if (!text) return
-    setLocalMessages((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        text,
-        time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-        outgoing: true,
-      },
-    ])
+    onSend(text)
     setDraft('')
   }
 
@@ -52,13 +42,12 @@ export default function ChatView({ chat }: ChatViewProps) {
         </div>
         <div>
           <div className="font-medium text-white">{chat.name}</div>
-          <div className="text-xs text-tg-muted">en ligne</div>
         </div>
       </header>
 
       <div className="flex-1 overflow-y-auto px-5 py-4">
         <div className="flex flex-col gap-2">
-          {localMessages.map((message) => (
+          {messages.map((message) => (
             <div
               key={message.id}
               className={`flex ${message.outgoing ? 'justify-end' : 'justify-start'}`}

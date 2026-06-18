@@ -6,3 +6,5 @@ release
 td_db
 td_files
 .DS_Store
+.env
+*.tsbuildinfo

@@ -1,0 +1,5 @@
+{
+  "_comment": "Template — copier le contenu réel dans le whitelist.json généré par l'app (dossier userData d'Electron). Les ids ci-dessous sont des exemples, à remplacer par les vrais ids Telegram.",
+  "allowed_user_ids": [123456789, 987654321],
+  "allowed_chat_ids": [-1001234567890]
+}
