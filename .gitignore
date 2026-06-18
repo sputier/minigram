@@ -1,0 +1,8 @@
+node_modules
+dist
+dist-electron
+release
+*.local
+td_db
+td_files
+.DS_Store
