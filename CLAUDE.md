@@ -30,7 +30,7 @@ Basée sur TDLib (la lib officielle Telegram), interface similaire à Telegram D
 
 \- \*\*tdl\*\* (npm) — binding Node.js pour TDLib
 
-\- \*\*tdl-install-binaries\*\* — fournit les binaires TDLib pré-compilés (évite de compiler TDLib en C++)
+\- \*\*prebuilt-tdlib\*\* — fournit les binaires TDLib pré-compilés (évite de compiler TDLib en C++ ; remplace l'ancien `tdl-install-binaries`, retiré de npm)
 
 \- \*\*TypeScript\*\* partout
 
@@ -142,9 +142,9 @@ renderer/ (React)
 
 ```bash
 
-npm install tdl tdl-install-binaries
+npm install tdl prebuilt-tdlib
 
-npx tdl-install-binaries   # télécharge les binaires natifs Windows
+\# les binaires natifs sont téléchargés automatiquement à l'install, rien à lancer en plus
 
 ```
 
@@ -154,23 +154,27 @@ npx tdl-install-binaries   # télécharge les binaires natifs Windows
 
 ```typescript
 
-import { createClient } from 'tdl'
+import \* as tdl from 'tdl'
 
-import { TDLib } from 'tdl-install-binaries'
+import { getTdjson } from 'prebuilt-tdlib'
 
 
 
-const client = createClient(TDLib, {
+tdl.configure({ tdjson: getTdjson() })
 
-&#x20; apiId: TELEGRAM\_API\_ID,       // à créer sur https://my.telegram.org
+
+
+const client = tdl.createClient({
+
+&#x20; apiId: TELEGRAM\_API\_ID,       // à créer sur https://my.telegram.org, fourni via .env
 
 &#x20; apiHash: TELEGRAM\_API\_HASH,
 
-&#x20; databaseDirectory: './td\_db',
+&#x20; databaseDirectory: path.join(app.getPath('userData'), 'td\_db'),
 
-&#x20; filesDirectory: './td\_files',
+&#x20; filesDirectory: path.join(app.getPath('userData'), 'td\_files'),
 
-&#x20; databaseEncryptionKey: 'clé\_définie\_par\_parent',
+&#x20; databaseEncryptionKey: TDLIB\_ENCRYPTION\_KEY,  // requis, fourni via .env (NON NÉGOCIABLE)
 
 })
 

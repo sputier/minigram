@@ -38,6 +38,7 @@ let onMappedUpdate: (update: MappedUpdate) => void = () => {}
 export interface StartClientOptions {
   apiId: number
   apiHash: string
+  databaseEncryptionKey: string
   onAuthState: (state: AuthState) => void
   onUpdate: (update: MappedUpdate) => void
 }
@@ -50,13 +51,16 @@ export function startClient(options: StartClientOptions): void {
   ensureWhitelistFile(whitelistPath)
   whitelist = loadWhitelist(whitelistPath)
 
-  if (!options.apiId || !options.apiHash) {
+  if (!options.apiId || !options.apiHash || !options.databaseEncryptionKey) {
     console.error(
-      '[telegram] TELEGRAM_API_ID / TELEGRAM_API_HASH manquants ou invalides dans .env — ' +
-        'le client TDLib ne sera pas démarré. Copie .env.example vers .env et renseigne tes clés ' +
-        '(https://my.telegram.org/).',
+      '[telegram] TELEGRAM_API_ID / TELEGRAM_API_HASH / TDLIB_ENCRYPTION_KEY manquants ou invalides ' +
+        'dans .env — le client TDLib ne sera pas démarré. Copie .env.example vers .env et renseigne ' +
+        'tes clés (https://my.telegram.org/) ainsi qu\'une clé de chiffrement.',
     )
-    onAuthStateChange({ step: 'error', message: 'Configuration .env manquante (TELEGRAM_API_ID / TELEGRAM_API_HASH)' })
+    onAuthStateChange({
+      step: 'error',
+      message: 'Configuration .env manquante (TELEGRAM_API_ID / TELEGRAM_API_HASH / TDLIB_ENCRYPTION_KEY)',
+    })
     return
   }
 
@@ -65,6 +69,7 @@ export function startClient(options: StartClientOptions): void {
     apiHash: options.apiHash,
     databaseDirectory: path.join(app.getPath('userData'), 'td_db'),
     filesDirectory: path.join(app.getPath('userData'), 'td_files'),
+    databaseEncryptionKey: options.databaseEncryptionKey,
   })
 
   client.on('error', (err) => {

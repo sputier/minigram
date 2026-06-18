@@ -63,6 +63,7 @@ app.whenReady().then(() => {
   startClient({
     apiId: Number(process.env.TELEGRAM_API_ID),
     apiHash: process.env.TELEGRAM_API_HASH ?? '',
+    databaseEncryptionKey: process.env.TDLIB_ENCRYPTION_KEY ?? '',
     onAuthState: broadcastAuthState,
     onUpdate: broadcastUpdate,
   })
