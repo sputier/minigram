@@ -20,6 +20,14 @@ export default defineConfig({
             outDir: 'dist-electron',
             rollupOptions: {
               input: path.join(__dirname, 'electron/main.ts'),
+              // tdl/prebuilt-tdlib chargent un addon natif via node-gyp-build,
+              // qui résout les binaires prébuilds relativement au __dirname
+              // du package tdl. Si Rollup les inline dans main.cjs, ce
+              // __dirname devient celui du bundle (dist-electron) et la
+              // résolution échoue ("No native build was found"). On les
+              // garde donc external pour qu'ils restent de vrais `require()`
+              // résolus depuis node_modules au runtime.
+              external: ['tdl', 'prebuilt-tdlib'],
               output: {
                 format: 'cjs',
                 // .cjs (et non .js) car package.json a "type": "module" :

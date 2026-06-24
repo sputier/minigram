@@ -69,7 +69,11 @@ export function startClient(options: StartClientOptions): void {
     apiHash: options.apiHash,
     databaseDirectory: path.join(app.getPath('userData'), 'td_db'),
     filesDirectory: path.join(app.getPath('userData'), 'td_files'),
-    databaseEncryptionKey: options.databaseEncryptionKey,
+    // L'interface JSON de TDLib attend ce champ "bytes" en base64 ; une
+    // passphrase texte brute fait échouer setTdlibParameters avec
+    // "Wrong padding length". On encode ici pour que .env reste une simple
+    // phrase de passe lisible par le parent.
+    databaseEncryptionKey: Buffer.from(options.databaseEncryptionKey, 'utf-8').toString('base64'),
   })
 
   client.on('error', (err) => {

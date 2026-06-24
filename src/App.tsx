@@ -24,7 +24,7 @@ export default function App() {
   }, [activeChatId, messagesByChat])
 
   useEffect(() => {
-    window.minigram.onUpdate((update) => {
+    return window.minigram.onUpdate((update) => {
       if (update.kind === 'new-message') {
         const { chatId } = update.message
         setMessagesByChat((prev) => ({

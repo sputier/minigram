@@ -12,8 +12,12 @@ export default function AdminGate() {
   const [authPasswordInput, setAuthPasswordInput] = useState('')
 
   useEffect(() => {
-    window.minigram.onAdminGateToggle(() => setVisible((v) => !v))
-    window.minigram.onAuthState((state) => setAuthState(state))
+    const offToggle = window.minigram.onAdminGateToggle(() => setVisible((v) => !v))
+    const offAuthState = window.minigram.onAuthState((state) => setAuthState(state))
+    return () => {
+      offToggle()
+      offAuthState()
+    }
   }, [])
 
   if (!visible) return null
