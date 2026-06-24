@@ -10,9 +10,24 @@ export default function App() {
   const [messagesByChat, setMessagesByChat] = useState<Record<number, UiMessage[]>>({})
 
   useEffect(() => {
-    window.minigram.getChats().then((loaded) => {
-      setChats(loaded)
-      setActiveChatId((current) => current ?? loaded[0]?.id)
+    function loadChats() {
+      window.minigram
+        .getChats()
+        .then((loaded) => {
+          setChats(loaded)
+          setActiveChatId((current) => current ?? loaded[0]?.id)
+        })
+        .catch(() => {
+          // Échoue tant que le compte n'est pas connecté, c'est attendu.
+        })
+    }
+
+    loadChats()
+
+    // getChats() échoue tant que le compte n'est pas connecté (gate admin) ;
+    // on recharge dès que l'auth Telegram passe à "ready".
+    return window.minigram.onAuthState((state) => {
+      if (state.step === 'ready') loadChats()
     })
   }, [])
 
