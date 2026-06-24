@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import type { UiChat } from '../types/telegram'
+import type { UiChat, UiSelf } from '../types/telegram'
 
 interface SidebarProps {
+  self: UiSelf | null
   chats: UiChat[]
   activeChatId: number | undefined
   onSelectChat: (id: number) => void
 }
 
-export default function Sidebar({ chats, activeChatId, onSelectChat }: SidebarProps) {
+export default function Sidebar({ self, chats, activeChatId, onSelectChat }: SidebarProps) {
   const [filter, setFilter] = useState('')
 
   const filteredChats = chats.filter((chat) =>
@@ -17,8 +18,12 @@ export default function Sidebar({ chats, activeChatId, onSelectChat }: SidebarPr
   return (
     <aside className="flex h-full w-[320px] flex-shrink-0 flex-col bg-tg-sidebar">
       <div className="flex items-center gap-3 px-4 py-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-tg-bg text-tg-muted">
-          MG
+        <div
+          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm font-medium text-white"
+          style={{ backgroundColor: self?.color ?? '#2b5278' }}
+          title={self?.name ?? 'Non connecté'}
+        >
+          {self?.initials ?? 'MG'}
         </div>
         <input
           value={filter}

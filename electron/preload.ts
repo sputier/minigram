@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AuthState } from './telegram/client'
-import type { MappedUpdate, UiChat, UiMessage } from './telegram/mapUpdate'
+import type { MappedUpdate, UiChat, UiMessage, UiSelf } from './telegram/mapUpdate'
 
 export type Unsubscribe = () => void
 
@@ -12,6 +12,7 @@ export interface MinigramApi {
   submitPhoneNumber: (phone: string) => Promise<void>
   submitAuthCode: (code: string) => Promise<void>
   submitAuthPassword: (password: string) => Promise<void>
+  getMe: () => Promise<UiSelf | null>
   getChats: () => Promise<UiChat[]>
   getHistory: (chatId: number) => Promise<UiMessage[]>
   sendMessage: (chatId: number, text: string) => Promise<void>
@@ -34,6 +35,7 @@ const api: MinigramApi = {
   submitPhoneNumber: (phone) => ipcRenderer.invoke('admin:submit-phone', phone),
   submitAuthCode: (code) => ipcRenderer.invoke('admin:submit-code', code),
   submitAuthPassword: (password) => ipcRenderer.invoke('admin:submit-auth-password', password),
+  getMe: () => ipcRenderer.invoke('tg:get-me'),
   getChats: () => ipcRenderer.invoke('tg:get-chats'),
   getHistory: (chatId) => ipcRenderer.invoke('tg:get-history', chatId),
   sendMessage: (chatId, text) => ipcRenderer.invoke('tg:send-message', chatId, text),

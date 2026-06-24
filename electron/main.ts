@@ -6,6 +6,7 @@ import { checkAdminPassword } from './admin/authGate'
 import {
   getChats,
   getHistory,
+  getMe,
   sendMessage,
   startClient,
   startLogin,
@@ -87,6 +88,8 @@ ipcMain.handle('admin:submit-code', (_event, code: string) => {
 ipcMain.handle('admin:submit-auth-password', (_event, password: string) => {
   submitAuthPassword(password)
 })
+
+ipcMain.handle('tg:get-me', () => getMe())
 
 ipcMain.handle('tg:get-chats', () => getChats())
 

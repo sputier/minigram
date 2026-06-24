@@ -2,15 +2,23 @@ import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
 import AdminGate from './components/AdminGate'
-import type { UiChat, UiMessage } from './types/telegram'
+import type { UiChat, UiMessage, UiSelf } from './types/telegram'
 
 export default function App() {
+  const [self, setSelf] = useState<UiSelf | null>(null)
   const [chats, setChats] = useState<UiChat[]>([])
   const [activeChatId, setActiveChatId] = useState<number | undefined>(undefined)
   const [messagesByChat, setMessagesByChat] = useState<Record<number, UiMessage[]>>({})
 
   useEffect(() => {
-    function loadChats() {
+    function loadAccount() {
+      window.minigram
+        .getMe()
+        .then(setSelf)
+        .catch(() => {
+          // Échoue tant que le compte n'est pas connecté, c'est attendu.
+        })
+
       window.minigram
         .getChats()
         .then((loaded) => {
@@ -22,12 +30,12 @@ export default function App() {
         })
     }
 
-    loadChats()
+    loadAccount()
 
-    // getChats() échoue tant que le compte n'est pas connecté (gate admin) ;
-    // on recharge dès que l'auth Telegram passe à "ready".
+    // getMe()/getChats() échouent tant que le compte n'est pas connecté
+    // (gate admin) ; on recharge dès que l'auth Telegram passe à "ready".
     return window.minigram.onAuthState((state) => {
-      if (state.step === 'ready') loadChats()
+      if (state.step === 'ready') loadAccount()
     })
   }, [])
 
@@ -74,7 +82,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-tg-bg text-white">
-      <Sidebar chats={chats} activeChatId={activeChatId} onSelectChat={setActiveChatId} />
+      <Sidebar self={self} chats={chats} activeChatId={activeChatId} onSelectChat={setActiveChatId} />
       <ChatView
         chat={activeChat}
         messages={activeChatId !== undefined ? messagesByChat[activeChatId] ?? [] : []}

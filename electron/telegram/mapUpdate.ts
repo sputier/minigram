@@ -61,6 +61,20 @@ export interface UiChat {
   unread?: number
 }
 
+export interface TdUser {
+  _: 'user'
+  id: number
+  first_name: string
+  last_name?: string
+}
+
+export interface UiSelf {
+  id: number
+  name: string
+  initials: string
+  color: string
+}
+
 export type MappedUpdate =
   | { kind: 'chat-last-message'; chatId: number; lastMessage: string; time: string }
   | { kind: 'new-message'; message: UiMessage }
@@ -101,6 +115,16 @@ export function mapMessage(message: TdMessage): UiMessage {
     text: extractText(message.content),
     time: formatTime(message.date),
     outgoing: Boolean(message.is_outgoing),
+  }
+}
+
+export function mapUser(user: TdUser): UiSelf {
+  const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
+  return {
+    id: user.id,
+    name: name || 'Compte connecté',
+    initials: initialsForTitle(name),
+    color: colorForId(user.id),
   }
 }
 

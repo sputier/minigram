@@ -16,6 +16,13 @@ export interface UiChat {
   unread?: number
 }
 
+export interface UiSelf {
+  id: number
+  name: string
+  initials: string
+  color: string
+}
+
 export type MappedUpdate =
   | { kind: 'chat-last-message'; chatId: number; lastMessage: string; time: string }
   | { kind: 'new-message'; message: UiMessage }

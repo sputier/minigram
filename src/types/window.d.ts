@@ -1,4 +1,4 @@
-import type { AuthState, MappedUpdate, UiChat, UiMessage } from './telegram'
+import type { AuthState, MappedUpdate, UiChat, UiMessage, UiSelf } from './telegram'
 
 type Unsubscribe = () => void
 
@@ -12,6 +12,7 @@ declare global {
       submitPhoneNumber: (phone: string) => Promise<void>
       submitAuthCode: (code: string) => Promise<void>
       submitAuthPassword: (password: string) => Promise<void>
+      getMe: () => Promise<UiSelf | null>
       getChats: () => Promise<UiChat[]>
       getHistory: (chatId: number) => Promise<UiMessage[]>
       sendMessage: (chatId: number, text: string) => Promise<void>

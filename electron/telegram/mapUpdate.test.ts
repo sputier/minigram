@@ -5,8 +5,10 @@ import {
   mapChat,
   mapMessage,
   mapUpdate,
+  mapUser,
   type TdChat,
   type TdMessage,
+  type TdUser,
 } from './mapUpdate'
 import type { Whitelist } from './whitelist'
 
@@ -124,6 +126,18 @@ describe('mapUpdate', () => {
   it('ne throw jamais sur un update malformé', () => {
     expect(() => mapUpdate({ _: 'updateNewMessage' } as never, whitelist)).not.toThrow()
     expect(mapUpdate({ _: 'updateNewMessage' } as never, whitelist)).toBeNull()
+  })
+})
+
+describe('mapUser', () => {
+  it("mappe l'utilisateur connecté avec prénom et nom", () => {
+    const user: TdUser = { _: 'user', id: 42, first_name: 'Ada', last_name: 'Lovelace' }
+    expect(mapUser(user)).toMatchObject({ id: 42, name: 'Ada Lovelace', initials: 'A' })
+  })
+
+  it('retombe sur un nom par défaut sans prénom', () => {
+    const user: TdUser = { _: 'user', id: 7, first_name: '' }
+    expect(mapUser(user).name).toBe('Compte connecté')
   })
 })
 

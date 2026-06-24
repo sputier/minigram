@@ -4,7 +4,7 @@ import * as tdl from 'tdl'
 import type { LoginUser } from 'tdl'
 import { getTdjson } from 'prebuilt-tdlib'
 import { ensureWhitelistFile, loadWhitelist, isChatAllowed, type Whitelist } from './whitelist'
-import { isChatObjectAllowed, mapChat, mapMessage, mapUpdate, type MappedUpdate, type TdChat, type TdMessage, type TdUpdate, type UiChat, type UiMessage } from './mapUpdate'
+import { isChatObjectAllowed, mapChat, mapMessage, mapUpdate, mapUser, type MappedUpdate, type TdChat, type TdMessage, type TdUpdate, type TdUser, type UiChat, type UiMessage, type UiSelf } from './mapUpdate'
 
 tdl.configure({ tdjson: getTdjson() })
 
@@ -149,6 +149,12 @@ export function submitAuthCode(code: string): void {
 export function submitAuthPassword(password: string): void {
   pendingPassword?.resolve(password)
   pendingPassword = null
+}
+
+export async function getMe(): Promise<UiSelf | null> {
+  if (!client) return null
+  const me = (await client.invoke({ _: 'getMe' })) as unknown as TdUser
+  return mapUser(me)
 }
 
 export async function getChats(): Promise<UiChat[]> {
