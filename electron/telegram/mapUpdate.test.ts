@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  extractMedia,
   extractPendingCandidate,
   isChatObjectAllowed,
   isMessageAllowed,
@@ -8,7 +9,9 @@ import {
   mapUpdate,
   mapUser,
   type TdChat,
+  type TdFile,
   type TdMessage,
+  type TdMessageContent,
   type TdUser,
 } from './mapUpdate'
 import type { Whitelist } from './whitelist'
@@ -35,6 +38,15 @@ const strangerMessage: TdMessage = {
   content: { _: 'messageText', text: { _: 'formattedText', text: 'Bonjour inconnu' } },
 }
 
+const photoMessage: TdMessage = {
+  ...allowedGroupMessage,
+  id: 3,
+  content: {
+    _: 'messagePhoto',
+    photo: { _: 'photo', sizes: [{ _: 'photoSize', photo: { _: 'file', id: 555 }, width: 1280, height: 1280 }] },
+  },
+}
+
 describe('mapMessage', () => {
   it('mappe un message texte', () => {
     const result = mapMessage(allowedGroupMessage)
@@ -43,9 +55,91 @@ describe('mapMessage', () => {
     expect(result.outgoing).toBe(false)
   })
 
-  it('retombe sur un placeholder pour un contenu non textuel', () => {
-    const photoMessage: TdMessage = { ...allowedGroupMessage, content: { _: 'messagePhoto' } }
-    expect(mapMessage(photoMessage).text).toBe('[Média]')
+  it('texte vide pour un média sans légende (le média est rendu inline, pas de doublon textuel)', () => {
+    const result = mapMessage(photoMessage)
+    expect(result.text).toBe('')
+    expect(result.media).toEqual({ fileId: 555, kind: 'photo' })
+  })
+
+  it('utilise la légende comme texte si présente', () => {
+    const captioned: TdMessage = {
+      ...photoMessage,
+      content: { ...photoMessage.content!, caption: { _: 'formattedText', text: 'Regarde ça' } },
+    }
+    expect(mapMessage(captioned).text).toBe('Regarde ça')
+  })
+
+  it("n'ajoute pas de champ media pour un message texte", () => {
+    expect(mapMessage(allowedGroupMessage).media).toBeUndefined()
+  })
+})
+
+describe('extractMedia', () => {
+  const file: TdFile = { _: 'file', id: 555 }
+
+  it('retourne null sans contenu', () => {
+    expect(extractMedia(undefined)).toBeNull()
+  })
+
+  it('retourne null pour un message texte', () => {
+    expect(extractMedia(allowedGroupMessage.content)).toBeNull()
+  })
+
+  it('extrait la plus grande taille de photo', () => {
+    const content: TdMessageContent = {
+      _: 'messagePhoto',
+      photo: {
+        _: 'photo',
+        sizes: [
+          { _: 'photoSize', photo: { _: 'file', id: 1 }, width: 90, height: 90 },
+          { _: 'photoSize', photo: file, width: 1280, height: 1280 },
+        ],
+      },
+    }
+    expect(extractMedia(content)).toEqual({ fileId: 555, kind: 'photo' })
+  })
+
+  it('extrait une vidéo avec mime/nom de fichier', () => {
+    const content: TdMessageContent = {
+      _: 'messageVideo',
+      video: { _: 'video', video: file, mime_type: 'video/mp4', file_name: 'clip.mp4' },
+    }
+    expect(extractMedia(content)).toEqual({ fileId: 555, kind: 'video', mimeType: 'video/mp4', fileName: 'clip.mp4' })
+  })
+
+  it('extrait un message vocal', () => {
+    const content: TdMessageContent = {
+      _: 'messageVoiceNote',
+      voice_note: { _: 'voiceNote', voice_note: file, mime_type: 'audio/ogg' },
+    }
+    expect(extractMedia(content)).toEqual({ fileId: 555, kind: 'voice', mimeType: 'audio/ogg' })
+  })
+
+  it('extrait un document', () => {
+    const content: TdMessageContent = {
+      _: 'messageDocument',
+      document: { _: 'document', document: file, mime_type: 'application/pdf', file_name: 'rapport.pdf' },
+    }
+    expect(extractMedia(content)).toEqual({
+      fileId: 555,
+      kind: 'document',
+      mimeType: 'application/pdf',
+      fileName: 'rapport.pdf',
+    })
+  })
+
+  it('extrait un sticker', () => {
+    const content: TdMessageContent = { _: 'messageSticker', sticker: { _: 'sticker', sticker: file } }
+    expect(extractMedia(content)).toEqual({ fileId: 555, kind: 'sticker' })
+  })
+
+  it('extrait une animation (GIF)', () => {
+    const content: TdMessageContent = { _: 'messageAnimation', animation: { _: 'animation', animation: file } }
+    expect(extractMedia(content)).toEqual({ fileId: 555, kind: 'animation', mimeType: undefined, fileName: undefined })
+  })
+
+  it('retourne null si le contenu déclaré ne porte pas le fichier attendu', () => {
+    expect(extractMedia({ _: 'messagePhoto' })).toBeNull()
   })
 })
 
@@ -214,5 +308,10 @@ describe('chat-level filtering', () => {
     const result = mapChat(chatWithMessage)
     expect(result).toMatchObject({ id: -1001, name: 'Famille', lastMessage: 'Salut' })
     expect(result.initials).toBe('F')
+  })
+
+  it('utilise un label descriptif pour un dernier message média sans légende', () => {
+    const chatWithPhoto: TdChat = { ...groupChat, last_message: photoMessage }
+    expect(mapChat(chatWithPhoto).lastMessage).toBe('📷 Photo')
   })
 })

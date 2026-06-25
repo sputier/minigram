@@ -16,9 +16,11 @@ export interface MinigramApi {
   getMe: () => Promise<UiSelf | null>
   getChats: () => Promise<UiChat[]>
   getHistory: (chatId: number) => Promise<UiMessage[]>
+  getMoreHistory: (chatId: number, beforeMessageId: number) => Promise<UiMessage[]>
   sendMessage: (chatId: number, text: string) => Promise<void>
   onUpdate: (cb: (update: MappedUpdate) => void) => Unsubscribe
   onChatsChanged: (cb: (chats: UiChat[]) => void) => Unsubscribe
+  onMediaReady: (cb: (fileId: number) => void) => Unsubscribe
   getPendingRequests: () => Promise<PendingEntry[]>
   approvePending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>
   rejectPending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>
@@ -45,6 +47,7 @@ const api: MinigramApi = {
   getMe: () => ipcRenderer.invoke('tg:get-me'),
   getChats: () => ipcRenderer.invoke('tg:get-chats'),
   getHistory: (chatId) => ipcRenderer.invoke('tg:get-history', chatId),
+  getMoreHistory: (chatId, beforeMessageId) => ipcRenderer.invoke('tg:get-more-history', chatId, beforeMessageId),
   sendMessage: (chatId, text) => ipcRenderer.invoke('tg:send-message', chatId, text),
   onUpdate: (cb) => {
     const listener = (_event: Electron.IpcRendererEvent, update: MappedUpdate) => cb(update)
@@ -55,6 +58,11 @@ const api: MinigramApi = {
     const listener = (_event: Electron.IpcRendererEvent, chats: UiChat[]) => cb(chats)
     ipcRenderer.on('tg:chats-changed', listener)
     return () => ipcRenderer.off('tg:chats-changed', listener)
+  },
+  onMediaReady: (cb) => {
+    const listener = (_event: Electron.IpcRendererEvent, fileId: number) => cb(fileId)
+    ipcRenderer.on('tg:media-ready', listener)
+    return () => ipcRenderer.off('tg:media-ready', listener)
   },
   getPendingRequests: () => ipcRenderer.invoke('admin:get-pending'),
   approvePending: (kind, id) => ipcRenderer.invoke('admin:approve-pending', kind, id),

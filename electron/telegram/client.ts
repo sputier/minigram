@@ -25,6 +25,24 @@ import {
   type PendingStore,
 } from './pendingRequests'
 import {
+  ensureSyncStateFile,
+  getProgress,
+  loadSyncState,
+  saveSyncState,
+  upsertProgress,
+  type SyncState,
+} from './historySync'
+import {
+  addPendingMedia,
+  ensureMediaSyncStateFile,
+  getPending as getPendingMedia,
+  loadMediaSyncState,
+  markDone,
+  saveMediaSyncState,
+  type MediaSyncState,
+} from './mediaSync'
+import {
+  extractMedia,
   extractPendingCandidate,
   isChatObjectAllowed,
   mapChat,
@@ -67,12 +85,22 @@ let allowedChatIdsCache = new Set<number>()
 let pendingStore: PendingStore = { pending: [], blocked: [] }
 let pendingStorePath = ''
 
+let historySyncStatePath = ''
+let historySyncQueue: number[] = []
+let historySyncRunning = false
+
+let mediaSyncStatePath = ''
+let mediaSyncState: MediaSyncState = { entries: [] }
+let mediaQueue: number[] = []
+let mediaQueueRunning = false
+
 let pendingPhone: Deferred<string> | null = null
 let pendingCode: Deferred<string> | null = null
 let pendingPassword: Deferred<string> | null = null
 
 let onAuthStateChange: (state: AuthState) => void = () => {}
 let onMappedUpdate: (update: MappedUpdate) => void = () => {}
+let onMediaReady: (fileId: number) => void = () => {}
 
 export interface StartClientOptions {
   apiId: number
@@ -80,11 +108,13 @@ export interface StartClientOptions {
   databaseEncryptionKey: string
   onAuthState: (state: AuthState) => void
   onUpdate: (update: MappedUpdate) => void
+  onMediaReady?: (fileId: number) => void
 }
 
 export function startClient(options: StartClientOptions): void {
   onAuthStateChange = options.onAuthState
   onMappedUpdate = options.onUpdate
+  onMediaReady = options.onMediaReady ?? (() => {})
 
   whitelistPath = path.join(app.getPath('userData'), 'whitelist.json')
   ensureWhitelistFile(whitelistPath)
@@ -93,6 +123,13 @@ export function startClient(options: StartClientOptions): void {
   pendingStorePath = path.join(app.getPath('userData'), 'pending-chats.json')
   ensurePendingStoreFile(pendingStorePath)
   pendingStore = loadPendingStore(pendingStorePath)
+
+  historySyncStatePath = path.join(app.getPath('userData'), 'history-sync.json')
+  ensureSyncStateFile(historySyncStatePath)
+
+  mediaSyncStatePath = path.join(app.getPath('userData'), 'media-sync.json')
+  ensureMediaSyncStateFile(mediaSyncStatePath)
+  mediaSyncState = loadMediaSyncState(mediaSyncStatePath)
 
   if (!options.apiId || !options.apiHash || !options.databaseEncryptionKey) {
     console.error(
@@ -136,7 +173,13 @@ export function startClient(options: StartClientOptions): void {
     whitelist = loadWhitelist(whitelistPath)
 
     const mapped = mapUpdate(raw, whitelist)
-    if (mapped) onMappedUpdate(mapped)
+    if (mapped) {
+      onMappedUpdate(mapped)
+      if (mapped.kind === 'new-message') {
+        const message = (raw as { message?: TdMessage }).message
+        if (message) enqueueMediaForMessage(message)
+      }
+    }
 
     const candidate = extractPendingCandidate(raw, whitelist)
     if (candidate) void enqueuePendingCandidate(candidate)
@@ -147,7 +190,10 @@ function handleAuthorizationState(state: string | undefined): void {
   if (state === 'authorizationStateReady') {
     void seedWhitelistIfEmpty()
       .catch((err) => console.error('[telegram] seed whitelist échoué', err))
-      .finally(() => onAuthStateChange({ step: 'ready' }))
+      .finally(() => {
+        resumePendingMediaDownloads()
+        onAuthStateChange({ step: 'ready' })
+      })
   } else if (state === 'authorizationStateClosed') {
     onAuthStateChange({ step: 'error', message: 'Session Telegram fermée' })
   }
@@ -175,6 +221,142 @@ async function seedWhitelistIfEmpty(): Promise<void> {
   }
   whitelist = seeded
   saveWhitelist(whitelistPath, whitelist)
+}
+
+// File de fond qui télécharge l'historique COMPLET de chaque chat autorisé,
+// indépendamment de ce que l'utilisateur ouvre. Idempotent : un chat déjà
+// marqué complete est ignoré immédiatement, donc ré-enqueuer sans arrêt
+// (ex. à chaque getChats()) ne coûte rien.
+function enqueueHistorySync(chatIds: number[]): void {
+  for (const id of chatIds) {
+    if (!historySyncQueue.includes(id)) historySyncQueue.push(id)
+  }
+  if (!historySyncRunning) void processHistorySyncQueue()
+}
+
+async function processHistorySyncQueue(): Promise<void> {
+  historySyncRunning = true
+  while (historySyncQueue.length > 0) {
+    const chatId = historySyncQueue.shift()!
+    try {
+      await syncChatHistory(chatId)
+    } catch (err) {
+      console.error('[telegram] sync historique échoué pour le chat', chatId, err)
+    }
+  }
+  historySyncRunning = false
+}
+
+// Pagine vers le passé jusqu'à épuisement (aucune limite de profondeur,
+// décision produit confirmée). La progression (oldestMessageId) est
+// persistée après CHAQUE batch, pas seulement à la fin : si l'app est
+// fermée en cours de route, on reprend exactement là où on s'est arrêté
+// au prochain démarrage plutôt que de tout recommencer.
+async function syncChatHistory(chatId: number): Promise<void> {
+  let state = loadSyncState(historySyncStatePath)
+  let progress = getProgress(state, chatId) ?? { chatId, oldestMessageId: 0, complete: false }
+  if (progress.complete) return
+
+  while (!progress.complete) {
+    if (!client) return
+
+    const result = await client.invoke({
+      _: 'getChatHistory',
+      chat_id: chatId,
+      from_message_id: progress.oldestMessageId,
+      offset: 0,
+      limit: 100,
+      only_local: false,
+    })
+    const batch = result.messages.filter((m) => m !== null) as unknown as TdMessage[]
+
+    for (const message of batch) enqueueMediaForMessage(message)
+
+    progress =
+      batch.length === 0
+        ? { ...progress, complete: true }
+        : { ...progress, oldestMessageId: batch[batch.length - 1]!.id }
+
+    state = upsertProgress(state, progress)
+    saveSyncState(historySyncStatePath, state)
+  }
+}
+
+// File de fond qui télécharge les fichiers (photos/vidéos/audio/documents/
+// stickers/animations) référencés par les messages traités, où qu'ils
+// soient découverts (affichage initial, scroll, sync complet, live).
+// downloadFile est lui-même idempotent/resumable côté TDLib : ré-enqueuer un
+// fichier déjà complet ou partiellement téléchargé ne coûte rien/reprend
+// juste là où TDLib s'était arrêté.
+function enqueueMediaForMessage(message: TdMessage): void {
+  const media = extractMedia(message.content)
+  if (!media) return
+
+  mediaSyncState = loadMediaSyncState(mediaSyncStatePath)
+  const updated = addPendingMedia(mediaSyncState, {
+    fileId: media.fileId,
+    chatId: message.chat_id,
+    messageId: message.id,
+  })
+  if (updated !== mediaSyncState) {
+    mediaSyncState = updated
+    saveMediaSyncState(mediaSyncStatePath, mediaSyncState)
+  }
+
+  if (!mediaQueue.includes(media.fileId)) mediaQueue.push(media.fileId)
+  if (!mediaQueueRunning) void processMediaQueue()
+}
+
+// Reprend au démarrage les téléchargements média laissés "pending" par une
+// session précédente interrompue (app fermée avant la fin).
+function resumePendingMediaDownloads(): void {
+  mediaSyncState = loadMediaSyncState(mediaSyncStatePath)
+  for (const entry of getPendingMedia(mediaSyncState)) {
+    if (!mediaQueue.includes(entry.fileId)) mediaQueue.push(entry.fileId)
+  }
+  if (mediaQueue.length > 0 && !mediaQueueRunning) void processMediaQueue()
+}
+
+async function downloadMediaFile(fileId: number): Promise<void> {
+  if (!client) return
+  await client.invoke({ _: 'downloadFile', file_id: fileId, priority: 1, offset: 0, limit: 0, synchronous: true })
+}
+
+// file_id n'est fiable que pour la durée de vie du process TDLib qui l'a
+// émis : un id persisté dans media-sync.json puis réutilisé après un
+// redémarrage de l'app (process TDLib différent) échoue avec "File not
+// found", même si le fichier existe bel et bien côté serveur. On ne le
+// traite donc que comme une clé de dédup ; avant chaque téléchargement, on
+// rafraîchit le message d'origine (chatId/messageId, stables) pour obtenir
+// l'identifiant de fichier valide dans la session en cours.
+async function processMediaQueue(): Promise<void> {
+  mediaQueueRunning = true
+  while (mediaQueue.length > 0) {
+    const fileId = mediaQueue.shift()!
+    if (!client) break
+
+    const entry = mediaSyncState.entries.find((e) => e.fileId === fileId)
+    if (!entry) continue
+
+    try {
+      const message = (await client.invoke({
+        _: 'getMessage',
+        chat_id: entry.chatId,
+        message_id: entry.messageId,
+      })) as unknown as TdMessage
+      const freshFileId = extractMedia(message.content)?.fileId ?? fileId
+
+      await downloadMediaFile(freshFileId)
+
+      mediaSyncState = loadMediaSyncState(mediaSyncStatePath)
+      mediaSyncState = markDone(mediaSyncState, fileId)
+      saveMediaSyncState(mediaSyncStatePath, mediaSyncState)
+      onMediaReady(freshFileId)
+    } catch (err) {
+      console.error('[telegram] téléchargement média échoué pour le fichier', fileId, err)
+    }
+  }
+  mediaQueueRunning = false
 }
 
 // Enrichit le candidat détecté (nom réel via getUser/getChat, fallback sur
@@ -283,16 +465,82 @@ export async function getChats(): Promise<UiChat[]> {
   tdChats.sort((a, b) => (b.last_message?.date ?? 0) - (a.last_message?.date ?? 0))
   allowedChatIdsCache = new Set(tdChats.map((c) => c.id))
 
+  enqueueHistorySync(Array.from(allowedChatIdsCache))
+
   return tdChats.map(mapChat)
+}
+
+const HISTORY_PAGE_SIZE = 50
+const HISTORY_MAX_FETCHES = 5
+
+// TDLib documente explicitement que getChatHistory peut renvoyer moins de
+// messages que la limite demandée ("the number of returned messages is
+// chosen by TDLib"), surtout au premier appel sur un chat jamais consulté
+// dans cette session — il faut donc relancer en paginant par
+// from_message_id jusqu'à atteindre la page demandée ou une réponse vide.
+// Utilisé pour l'affichage (borné, contrairement à syncChatHistory qui
+// continue sans limite en arrière-plan).
+async function fetchHistoryPage(chatId: number, fromMessageId: number, pageSize: number): Promise<TdMessage[]> {
+  if (!client) return []
+
+  const collected: TdMessage[] = []
+  let cursor = fromMessageId
+
+  for (let attempt = 0; attempt < HISTORY_MAX_FETCHES && collected.length < pageSize; attempt++) {
+    const result = await client.invoke({
+      _: 'getChatHistory',
+      chat_id: chatId,
+      from_message_id: cursor,
+      offset: 0,
+      limit: pageSize - collected.length,
+      only_local: false,
+    })
+    const batch = result.messages.filter((m) => m !== null) as unknown as TdMessage[]
+    if (batch.length === 0) break
+
+    collected.push(...batch)
+    cursor = batch[batch.length - 1]!.id
+  }
+
+  return collected
 }
 
 export async function getHistory(chatId: number): Promise<UiMessage[]> {
   if (!client || !allowedChatIdsCache.has(chatId)) return []
 
-  const result = await client.invoke({ _: 'getChatHistory', chat_id: chatId, limit: 50 })
-  const messages = result.messages.filter((m) => m !== null) as unknown as TdMessage[]
+  const messages = await fetchHistoryPage(chatId, 0, HISTORY_PAGE_SIZE)
+  for (const message of messages) enqueueMediaForMessage(message)
 
   return messages.map(mapMessage).reverse()
+}
+
+// Scroll infini : charge la page plus ancienne que beforeMessageId. Comme
+// getHistory, ne dépend pas de syncChatHistory pour être réactif (qui peut
+// être encore loin derrière sur un chat très actif) — TDLib sert depuis son
+// cache local si déjà synced, sinon va chercher sur le serveur.
+export async function getMoreHistory(chatId: number, beforeMessageId: number): Promise<UiMessage[]> {
+  if (!client || !allowedChatIdsCache.has(chatId)) return []
+
+  const messages = await fetchHistoryPage(chatId, beforeMessageId, HISTORY_PAGE_SIZE)
+  for (const message of messages) enqueueMediaForMessage(message)
+
+  return messages.map(mapMessage).reverse()
+}
+
+// Résout le chemin local d'un fichier déjà téléchargé (ou en cours), pour
+// le protocole minigram-media://. Ne déclenche pas de téléchargement ici —
+// c'est le rôle de processMediaQueue ; on se contente de lire l'état TDLib.
+export async function resolveFilePath(fileId: number): Promise<string | null> {
+  if (!client) return null
+  try {
+    const file = (await client.invoke({ _: 'getFile', file_id: fileId })) as unknown as {
+      local?: { path?: string; is_downloading_completed?: boolean }
+    }
+    if (file.local?.is_downloading_completed && file.local.path) return file.local.path
+    return null
+  } catch {
+    return null
+  }
 }
 
 export async function sendMessage(chatId: number, text: string): Promise<void> {

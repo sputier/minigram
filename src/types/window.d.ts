@@ -15,9 +15,11 @@ declare global {
       getMe: () => Promise<UiSelf | null>
       getChats: () => Promise<UiChat[]>
       getHistory: (chatId: number) => Promise<UiMessage[]>
+      getMoreHistory: (chatId: number, beforeMessageId: number) => Promise<UiMessage[]>
       sendMessage: (chatId: number, text: string) => Promise<void>
       onUpdate: (cb: (update: MappedUpdate) => void) => Unsubscribe
       onChatsChanged: (cb: (chats: UiChat[]) => void) => Unsubscribe
+      onMediaReady: (cb: (fileId: number) => void) => Unsubscribe
       getPendingRequests: () => Promise<PendingEntry[]>
       approvePending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>
       rejectPending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>

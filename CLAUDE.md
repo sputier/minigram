@@ -148,6 +148,20 @@ renderer/ (React)
 
 
 
+\### Archivage complet de l'historique (texte + médias)
+
+\- Objectif : récupérer l'historique \*\*complet\*\* (sans limite de profondeur) de chaque discussion whitelistée, médias compris (photos, vidéos, audio, documents, stickers, animations), de façon résiliente à une fermeture de l'app en cours de route.
+
+\- \*\*`history-sync.json`\*\* (dans `userData`) : progression par chat — `{ chats: [{ chatId, oldestMessageId, complete }] }`. Une file de fond (`enqueueHistorySync`/`processHistorySyncQueue`/`syncChatHistory` dans `electron/telegram/client.ts`) pagine vers le passé via `getChatHistory`, persiste `oldestMessageId` après \*\*chaque\*\* batch (pas seulement à la fin), et reprend exactement là où elle s'était arrêtée au redémarrage suivant.
+
+\- \*\*`media-sync.json`\*\* (dans `userData`) : file des fichiers à télécharger — `{ entries: [{ fileId, chatId, messageId, status: "pending"|"done" }] }`, dédupliquée par `fileId`. Découverte à chaque message traité (affichage, scroll, sync de fond, live).
+
+\- \*\*Point d'attention TDLib important\*\* : un `file_id` n'est valide que pour la durée de vie du process TDLib qui l'a émis — le persister puis le réutiliser après un redémarrage de l'app échoue avec \*\*"File not found"\*\*, même si le fichier existe côté serveur. `media-sync.json` ne sert donc qu'à dédupliquer/lister ce qui reste à faire ; avant chaque téléchargement, le code rafraîchit le message d'origine (`getMessage(chatId, messageId)`) pour obtenir l'identifiant de fichier valide dans la session en cours, puis appelle `downloadFile`.
+
+\- \*\*Affichage\*\* : scroll infini vers le haut dans `ChatView` (`getMoreHistory(chatId, beforeMessageId)`), avec préservation de la position de scroll lors du chargement de messages plus anciens (pas de saut visuel). Les médias téléchargés sont servis au renderer via le protocole custom `minigram-media://<fileId>` (enregistré dans `main.ts`), qui résout l'id en chemin local exclusivement via TDLib (`getFile`) — jamais d'accès direct au système de fichiers depuis le renderer, avec vérification que le chemin résolu reste dans `td_files`.
+
+
+
 \### Session pré-authentifiée
 
 \- Le parent crée le compte Telegram de l'enfant (numéro virtuel possible)
@@ -284,6 +298,10 @@ Canaux additionnels (gate admin, protégés par mot de passe + raccourci caché 
 
 \- `tg:chats-changed` — rediffusion de la liste de chats vers le renderer après une action admin (approbation/ajout), pour que l'UI enfant se mette à jour sans redémarrage
 
+\- `tg:get-more-history` — pagination vers le passé pour le scroll infini (`getMoreHistory`)
+
+\- `tg:media-ready` — notifie le renderer qu'un fichier média vient de finir de se télécharger (déclenche un nouvel essai d'affichage)
+
 
 
 \---
@@ -361,8 +379,6 @@ Config `electron-builder.json` : target NSIS (installeur Windows), icône custom
 \- Paiements
 
 \- Jeux Telegram
-
-\- Téléchargement auto de médias (laisser manuel)
 
 \- Tout accès à des chats hors whitelist
 

@@ -9,6 +9,9 @@ export default function App() {
   const [chats, setChats] = useState<UiChat[]>([])
   const [activeChatId, setActiveChatId] = useState<number | undefined>(undefined)
   const [messagesByChat, setMessagesByChat] = useState<Record<number, UiMessage[]>>({})
+  const [noMoreHistory, setNoMoreHistory] = useState<Record<number, boolean>>({})
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [mediaVersion, setMediaVersion] = useState(0)
 
   useEffect(() => {
     function loadAccount() {
@@ -54,6 +57,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    return window.minigram.onMediaReady(() => setMediaVersion((v) => v + 1))
+  }, [])
+
+  useEffect(() => {
     return window.minigram.onUpdate((update) => {
       if (update.kind === 'new-message') {
         const { chatId } = update.message
@@ -87,6 +94,24 @@ export default function App() {
     void window.minigram.sendMessage(activeChatId, text)
   }
 
+  async function handleLoadMore() {
+    if (activeChatId === undefined || loadingMore) return
+    const oldest = messagesByChat[activeChatId]?.[0]?.id
+    if (oldest === undefined) return
+
+    setLoadingMore(true)
+    try {
+      const older = await window.minigram.getMoreHistory(activeChatId, oldest)
+      if (older.length === 0) {
+        setNoMoreHistory((prev) => ({ ...prev, [activeChatId]: true }))
+      } else {
+        setMessagesByChat((prev) => ({ ...prev, [activeChatId]: [...older, ...(prev[activeChatId] ?? [])] }))
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-tg-bg text-white">
       <Sidebar self={self} chats={chats} activeChatId={activeChatId} onSelectChat={setActiveChatId} />
@@ -95,6 +120,10 @@ export default function App() {
         messages={activeChatId !== undefined ? messagesByChat[activeChatId] ?? [] : []}
         onSend={handleSend}
         emptyMessage={emptyMessage}
+        onLoadMore={handleLoadMore}
+        hasMore={activeChatId !== undefined ? !noMoreHistory[activeChatId] : false}
+        loadingMore={loadingMore}
+        mediaVersion={mediaVersion}
       />
       <AdminGate />
     </div>

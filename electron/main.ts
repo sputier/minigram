@@ -1,7 +1,7 @@
 import 'dotenv/config'
-import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, net, protocol } from 'electron'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { checkAdminPassword } from './admin/authGate'
 import {
   addToWhitelist,
@@ -9,8 +9,10 @@ import {
   getChats,
   getHistory,
   getMe,
+  getMoreHistory,
   getPendingRequests,
   rejectPending,
+  resolveFilePath,
   searchContacts,
   sendMessage,
   startClient,
@@ -26,6 +28,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 const ADMIN_GATE_SHORTCUT = 'Control+Alt+Shift+P'
+const MEDIA_PROTOCOL = 'minigram-media'
+
+// Doit être enregistré avant app.whenReady().
+protocol.registerSchemesAsPrivileged([
+  { scheme: MEDIA_PROTOCOL, privileges: { secure: true, supportFetchAPI: true, stream: true, standard: true } },
+])
 
 let win: BrowserWindow | null = null
 
@@ -63,11 +71,43 @@ function broadcastChats(chats: UiChat[]) {
   win?.webContents.send('tg:chats-changed', chats)
 }
 
+function broadcastMediaReady(fileId: number) {
+  win?.webContents.send('tg:media-ready', fileId)
+}
+
 app.whenReady().then(() => {
   createWindow()
 
   globalShortcut.register(ADMIN_GATE_SHORTCUT, () => {
     win?.webContents.send('admin:toggle-gate')
+  })
+
+  // Sert au renderer les fichiers déjà téléchargés par TDLib (photos,
+  // vidéos, audio, documents...) sans jamais lui donner d'accès direct au
+  // système de fichiers. fileId est résolu en chemin local exclusivement
+  // via resolveFilePath (qui interroge TDLib lui-même, getFile) — le
+  // renderer ne peut donc jamais demander un chemin arbitraire. Vérification
+  // supplémentaire en profondeur : le chemin résolu doit rester dans
+  // td_files, au cas où TDLib renverrait un jour autre chose.
+  const filesDirectory = path.resolve(path.join(app.getPath('userData'), 'td_files'))
+
+  protocol.handle(MEDIA_PROTOCOL, async (request) => {
+    const fileId = Number(new URL(request.url).hostname)
+    if (!Number.isInteger(fileId) || fileId <= 0) {
+      return new Response('Identifiant de fichier invalide', { status: 400 })
+    }
+
+    const localPath = await resolveFilePath(fileId)
+    if (!localPath) {
+      return new Response('Fichier non disponible', { status: 404 })
+    }
+
+    const resolved = path.resolve(localPath)
+    if (resolved !== filesDirectory && !resolved.startsWith(filesDirectory + path.sep)) {
+      return new Response('Accès refusé', { status: 403 })
+    }
+
+    return net.fetch(pathToFileURL(resolved).toString())
   })
 
   startClient({
@@ -76,6 +116,7 @@ app.whenReady().then(() => {
     databaseEncryptionKey: process.env.TDLIB_ENCRYPTION_KEY ?? '',
     onAuthState: broadcastAuthState,
     onUpdate: broadcastUpdate,
+    onMediaReady: broadcastMediaReady,
   })
 })
 
@@ -103,6 +144,10 @@ ipcMain.handle('tg:get-me', () => getMe())
 ipcMain.handle('tg:get-chats', () => getChats())
 
 ipcMain.handle('tg:get-history', (_event, chatId: number) => getHistory(chatId))
+
+ipcMain.handle('tg:get-more-history', (_event, chatId: number, beforeMessageId: number) =>
+  getMoreHistory(chatId, beforeMessageId),
+)
 
 ipcMain.handle('tg:send-message', (_event, chatId: number, text: string) => sendMessage(chatId, text))
 

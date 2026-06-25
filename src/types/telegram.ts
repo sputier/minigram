@@ -1,9 +1,19 @@
+export type UiMediaKind = 'photo' | 'video' | 'voice' | 'document' | 'sticker' | 'animation'
+
+export interface UiMediaRef {
+  fileId: number
+  kind: UiMediaKind
+  mimeType?: string
+  fileName?: string
+}
+
 export interface UiMessage {
   id: number
   chatId: number
   text: string
   time: string
   outgoing: boolean
+  media?: UiMediaRef
 }
 
 export interface UiChat {

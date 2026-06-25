@@ -1,8 +1,21 @@
 import { isChatAllowed, isUserAllowed, type Whitelist } from './whitelist'
 
+export interface TdFile {
+  _: 'file'
+  id: number
+  local?: { path?: string; is_downloading_completed?: boolean }
+}
+
 export interface TdMessageContent {
   _: string
   text?: { _: string; text: string }
+  caption?: { _: string; text: string }
+  photo?: { _: 'photo'; sizes: Array<{ _: 'photoSize'; photo: TdFile; width: number; height: number }> }
+  video?: { _: 'video'; video: TdFile; mime_type?: string; file_name?: string }
+  voice_note?: { _: 'voiceNote'; voice_note: TdFile; mime_type?: string }
+  document?: { _: 'document'; document: TdFile; mime_type?: string; file_name?: string }
+  sticker?: { _: 'sticker'; sticker: TdFile }
+  animation?: { _: 'animation'; animation: TdFile; mime_type?: string; file_name?: string }
 }
 
 export interface TdMessageSender {
@@ -43,12 +56,22 @@ export type TdUpdate =
   | { _: 'updateMessageSendSucceeded'; message: TdMessage; old_message_id: number }
   | { _: string; [key: string]: unknown }
 
+export type UiMediaKind = 'photo' | 'video' | 'voice' | 'document' | 'sticker' | 'animation'
+
+export interface UiMediaRef {
+  fileId: number
+  kind: UiMediaKind
+  mimeType?: string
+  fileName?: string
+}
+
 export interface UiMessage {
   id: number
   chatId: number
   text: string
   time: string
   outgoing: boolean
+  media?: UiMediaRef
 }
 
 export interface UiChat {
@@ -90,10 +113,88 @@ export interface PendingCandidate {
 
 const AVATAR_COLORS = ['#e17076', '#7bc862', '#65aadd', '#a695e7', '#eea927', '#52c4eb', '#54cb68', '#ee7aae']
 
+const MEDIA_LABELS: Record<string, string> = {
+  messagePhoto: '📷 Photo',
+  messageVideo: '🎥 Vidéo',
+  messageVoiceNote: '🎤 Message vocal',
+  messageDocument: '📄 Document',
+  messageSticker: 'Sticker',
+  messageAnimation: 'GIF',
+}
+
+// Texte affiché dans la bulle de la conversation : le texte brut pour un
+// message texte, la légende pour un média qui en a une, sinon vide (le
+// média lui-même est rendu inline par l'UI, pas la peine de dupliquer un
+// label générique en dessous).
 function extractText(content?: TdMessageContent): string {
   if (!content) return ''
   if (content._ === 'messageText' && content.text) return content.text.text
-  return '[Média]'
+  if (content.caption?.text) return content.caption.text
+  return ''
+}
+
+// Texte affiché dans les aperçus (sidebar, demandes en attente) : pas de
+// rendu média possible dans ces contextes, donc on retombe sur un label
+// descriptif plutôt qu'une chaîne vide.
+function extractPreviewText(content?: TdMessageContent): string {
+  const text = extractText(content)
+  if (text) return text
+  if (!content) return ''
+  return MEDIA_LABELS[content._] ?? '[Média]'
+}
+
+function largestPhotoFile(photo: NonNullable<TdMessageContent['photo']>): TdFile | undefined {
+  return photo.sizes.at(-1)?.photo
+}
+
+// Pure, sans I/O : identifie le fichier à télécharger pour un message média,
+// si applicable. Le téléchargement effectif est géré côté glue (client.ts).
+export function extractMedia(content?: TdMessageContent): UiMediaRef | null {
+  if (!content) return null
+  switch (content._) {
+    case 'messagePhoto': {
+      const file = content.photo && largestPhotoFile(content.photo)
+      return file ? { fileId: file.id, kind: 'photo' } : null
+    }
+    case 'messageVideo': {
+      const file = content.video?.video
+      return file
+        ? { fileId: file.id, kind: 'video', mimeType: content.video?.mime_type, fileName: content.video?.file_name }
+        : null
+    }
+    case 'messageVoiceNote': {
+      const file = content.voice_note?.voice_note
+      return file ? { fileId: file.id, kind: 'voice', mimeType: content.voice_note?.mime_type } : null
+    }
+    case 'messageDocument': {
+      const file = content.document?.document
+      return file
+        ? {
+            fileId: file.id,
+            kind: 'document',
+            mimeType: content.document?.mime_type,
+            fileName: content.document?.file_name,
+          }
+        : null
+    }
+    case 'messageSticker': {
+      const file = content.sticker?.sticker
+      return file ? { fileId: file.id, kind: 'sticker' } : null
+    }
+    case 'messageAnimation': {
+      const file = content.animation?.animation
+      return file
+        ? {
+            fileId: file.id,
+            kind: 'animation',
+            mimeType: content.animation?.mime_type,
+            fileName: content.animation?.file_name,
+          }
+        : null
+    }
+    default:
+      return null
+  }
 }
 
 function formatTime(unixSeconds?: number): string {
@@ -116,12 +217,14 @@ function senderUserId(message: TdMessage): number | undefined {
 }
 
 export function mapMessage(message: TdMessage): UiMessage {
+  const media = extractMedia(message.content)
   return {
     id: message.id,
     chatId: message.chat_id,
     text: extractText(message.content),
     time: formatTime(message.date),
     outgoing: Boolean(message.is_outgoing),
+    ...(media ? { media } : {}),
   }
 }
 
@@ -141,7 +244,7 @@ export function mapChat(chat: TdChat): UiChat {
     name: chat.title,
     initials: initialsForTitle(chat.title),
     color: colorForId(chat.id),
-    lastMessage: chat.last_message ? extractText(chat.last_message.content) : '',
+    lastMessage: chat.last_message ? extractPreviewText(chat.last_message.content) : '',
     time: chat.last_message ? formatTime(chat.last_message.date) : '',
     unread: chat.unread_count && chat.unread_count > 0 ? chat.unread_count : undefined,
   }
@@ -177,7 +280,7 @@ export function extractPendingCandidate(update: TdUpdate, whitelist: Whitelist):
   if (!message || typeof message.chat_id !== 'number') return null
   if (isMessageAllowed(message, whitelist)) return null
 
-  const preview = extractText(message.content)
+  const preview = extractPreviewText(message.content)
   const userId = senderUserId(message)
 
   if (userId !== undefined) {
@@ -205,7 +308,7 @@ export function mapUpdate(update: TdUpdate, whitelist: Whitelist): MappedUpdate 
         return {
           kind: 'chat-last-message',
           chatId,
-          lastMessage: lastMessage ? extractText(lastMessage.content) : '',
+          lastMessage: lastMessage ? extractPreviewText(lastMessage.content) : '',
           time: lastMessage ? formatTime(lastMessage.date) : '',
         }
       }
