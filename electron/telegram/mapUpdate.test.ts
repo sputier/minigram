@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  extractPendingCandidate,
   isChatObjectAllowed,
   isMessageAllowed,
   mapChat,
@@ -126,6 +127,46 @@ describe('mapUpdate', () => {
   it('ne throw jamais sur un update malformé', () => {
     expect(() => mapUpdate({ _: 'updateNewMessage' } as never, whitelist)).not.toThrow()
     expect(mapUpdate({ _: 'updateNewMessage' } as never, whitelist)).toBeNull()
+  })
+})
+
+describe('extractPendingCandidate', () => {
+  it('retourne null si le chat est déjà autorisé par chat_id', () => {
+    expect(extractPendingCandidate({ _: 'updateNewMessage', message: allowedGroupMessage }, whitelist)).toBeNull()
+  })
+
+  it("retourne null si l'expéditeur est déjà autorisé par user_id (chat privé)", () => {
+    const privateMessage: TdMessage = {
+      ...strangerMessage,
+      chat_id: -3003,
+      sender_id: { _: 'messageSenderUser', user_id: 111 },
+    }
+    expect(extractPendingCandidate({ _: 'updateNewMessage', message: privateMessage }, whitelist)).toBeNull()
+  })
+
+  it('retourne un candidat "user" pour un inconnu (messageSenderUser)', () => {
+    const result = extractPendingCandidate({ _: 'updateNewMessage', message: strangerMessage }, whitelist)
+    expect(result).toEqual({ kind: 'user', id: 999, name: 'Utilisateur 999', preview: 'Bonjour inconnu' })
+  })
+
+  it('retourne un candidat "chat" pour un envoi anonyme (messageSenderChat)', () => {
+    const anonymousMessage: TdMessage = {
+      ...strangerMessage,
+      sender_id: { _: 'messageSenderChat', chat_id: -2002 },
+    }
+    const result = extractPendingCandidate({ _: 'updateNewMessage', message: anonymousMessage }, whitelist)
+    expect(result).toEqual({ kind: 'chat', id: -2002, name: 'Discussion -2002', preview: 'Bonjour inconnu' })
+  })
+
+  it("retourne null pour tout type d'update autre que updateNewMessage", () => {
+    expect(extractPendingCandidate({ _: 'updateChatLastMessage', chat_id: -2002 }, whitelist)).toBeNull()
+    expect(extractPendingCandidate({ _: 'updateUserStatus', user_id: 999 }, whitelist)).toBeNull()
+    expect(extractPendingCandidate({ _: 'updateConnectionState' }, whitelist)).toBeNull()
+  })
+
+  it('ne throw jamais sur un update malformé', () => {
+    expect(() => extractPendingCandidate({ _: 'updateNewMessage' } as never, whitelist)).not.toThrow()
+    expect(extractPendingCandidate({ _: 'updateNewMessage' } as never, whitelist)).toBeNull()
   })
 })
 

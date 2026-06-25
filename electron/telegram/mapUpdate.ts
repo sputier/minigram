@@ -81,6 +81,13 @@ export type MappedUpdate =
   | { kind: 'connection-state'; state: string }
   | { kind: 'user-status'; userId: number; status: string }
 
+export interface PendingCandidate {
+  kind: 'user' | 'chat'
+  id: number
+  name: string
+  preview: string
+}
+
 const AVATAR_COLORS = ['#e17076', '#7bc862', '#65aadd', '#a695e7', '#eea927', '#52c4eb', '#54cb68', '#ee7aae']
 
 function extractText(content?: TdMessageContent): string {
@@ -155,6 +162,28 @@ export function isMessageAllowed(message: TdMessage, whitelist: Whitelist): bool
   if (isChatAllowed(whitelist, message.chat_id)) return true
   const userId = senderUserId(message)
   return userId !== undefined && isUserAllowed(whitelist, userId)
+}
+
+// Détecte qu'updateNewMessage vient d'un chat/expéditeur hors whitelist, pour
+// le faire remonter en "demande en attente" côté client.ts au lieu de
+// disparaître silencieusement (cas déjà couvert par mapUpdate). Pure, sans
+// I/O — le nom n'est qu'un placeholder, enrichi via getUser/getChat côté
+// glue. Volontairement limité à updateNewMessage : updateMessageSendSucceeded
+// est l'écho des messages sortants de l'enfant (déjà gatés par sendMessage),
+// et updateChatLastMessage est un doublon du même événement.
+export function extractPendingCandidate(update: TdUpdate, whitelist: Whitelist): PendingCandidate | null {
+  if (update._ !== 'updateNewMessage') return null
+  const message = (update as { message?: TdMessage }).message
+  if (!message || typeof message.chat_id !== 'number') return null
+  if (isMessageAllowed(message, whitelist)) return null
+
+  const preview = extractText(message.content)
+  const userId = senderUserId(message)
+
+  if (userId !== undefined) {
+    return { kind: 'user', id: userId, name: `Utilisateur ${userId}`, preview }
+  }
+  return { kind: 'chat', id: message.chat_id, name: `Discussion ${message.chat_id}`, preview }
 }
 
 // Point de filtrage central : retourne null pour tout ce qui ne doit jamais

@@ -36,3 +36,17 @@ export type AuthState =
   | { step: 'password'; hint: string; retry: boolean }
   | { step: 'ready' }
   | { step: 'error'; message: string }
+
+export interface PendingEntry {
+  kind: 'user' | 'chat'
+  id: number
+  name: string
+  preview: string
+  firstSeen: number
+}
+
+export interface SearchResult {
+  kind: 'user' | 'chat'
+  id: number
+  name: string
+}

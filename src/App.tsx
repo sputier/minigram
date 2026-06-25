@@ -47,6 +47,13 @@ export default function App() {
   }, [activeChatId, messagesByChat])
 
   useEffect(() => {
+    // Une discussion approuvée/ajoutée depuis le gate admin ne déclenche pas
+    // forcément de nouveau message immédiat (onUpdate ne suffit pas) — le
+    // main process rediffuse explicitement la liste fraîche après ces actions.
+    return window.minigram.onChatsChanged(setChats)
+  }, [])
+
+  useEffect(() => {
     return window.minigram.onUpdate((update) => {
       if (update.kind === 'new-message') {
         const { chatId } = update.message

@@ -44,3 +44,17 @@ export function ensureWhitelistFile(filePath: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   fs.writeFileSync(filePath, JSON.stringify(EMPTY_WHITELIST, null, 2))
 }
+
+export function saveWhitelist(filePath: string, whitelist: Whitelist): void {
+  fs.writeFileSync(filePath, JSON.stringify(whitelist, null, 2))
+}
+
+export function addUserToWhitelist(whitelist: Whitelist, userId: number): Whitelist {
+  if (whitelist.allowed_user_ids.includes(userId)) return whitelist
+  return { ...whitelist, allowed_user_ids: [...whitelist.allowed_user_ids, userId] }
+}
+
+export function addChatToWhitelist(whitelist: Whitelist, chatId: number): Whitelist {
+  if (whitelist.allowed_chat_ids.includes(chatId)) return whitelist
+  return { ...whitelist, allowed_chat_ids: [...whitelist.allowed_chat_ids, chatId] }
+}

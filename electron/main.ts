@@ -4,9 +4,14 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkAdminPassword } from './admin/authGate'
 import {
+  addToWhitelist,
+  approvePending,
   getChats,
   getHistory,
   getMe,
+  getPendingRequests,
+  rejectPending,
+  searchContacts,
   sendMessage,
   startClient,
   startLogin,
@@ -15,7 +20,7 @@ import {
   submitPhoneNumber,
   type AuthState,
 } from './telegram/client'
-import type { MappedUpdate } from './telegram/mapUpdate'
+import type { MappedUpdate, UiChat } from './telegram/mapUpdate'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -52,6 +57,10 @@ function broadcastAuthState(state: AuthState) {
 
 function broadcastUpdate(update: MappedUpdate) {
   win?.webContents.send('tg:update', update)
+}
+
+function broadcastChats(chats: UiChat[]) {
+  win?.webContents.send('tg:chats-changed', chats)
 }
 
 app.whenReady().then(() => {
@@ -96,6 +105,26 @@ ipcMain.handle('tg:get-chats', () => getChats())
 ipcMain.handle('tg:get-history', (_event, chatId: number) => getHistory(chatId))
 
 ipcMain.handle('tg:send-message', (_event, chatId: number, text: string) => sendMessage(chatId, text))
+
+ipcMain.handle('admin:get-pending', () => getPendingRequests())
+
+ipcMain.handle('admin:approve-pending', async (_event, kind: 'user' | 'chat', id: number) => {
+  approvePending(kind, id)
+  broadcastChats(await getChats())
+  return getPendingRequests()
+})
+
+ipcMain.handle('admin:reject-pending', (_event, kind: 'user' | 'chat', id: number) => {
+  rejectPending(kind, id)
+  return getPendingRequests()
+})
+
+ipcMain.handle('admin:search-contacts', (_event, query: string) => searchContacts(query))
+
+ipcMain.handle('admin:add-to-whitelist', async (_event, kind: 'user' | 'chat', id: number) => {
+  addToWhitelist(kind, id)
+  broadcastChats(await getChats())
+})
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()

@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AuthState } from './telegram/client'
+import type { AuthState, SearchResult } from './telegram/client'
 import type { MappedUpdate, UiChat, UiMessage, UiSelf } from './telegram/mapUpdate'
+import type { PendingEntry } from './telegram/pendingRequests'
 
 export type Unsubscribe = () => void
 
@@ -17,6 +18,12 @@ export interface MinigramApi {
   getHistory: (chatId: number) => Promise<UiMessage[]>
   sendMessage: (chatId: number, text: string) => Promise<void>
   onUpdate: (cb: (update: MappedUpdate) => void) => Unsubscribe
+  onChatsChanged: (cb: (chats: UiChat[]) => void) => Unsubscribe
+  getPendingRequests: () => Promise<PendingEntry[]>
+  approvePending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>
+  rejectPending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>
+  searchContacts: (query: string) => Promise<SearchResult[]>
+  addToWhitelist: (kind: 'user' | 'chat', id: number) => Promise<void>
 }
 
 const api: MinigramApi = {
@@ -44,6 +51,16 @@ const api: MinigramApi = {
     ipcRenderer.on('tg:update', listener)
     return () => ipcRenderer.off('tg:update', listener)
   },
+  onChatsChanged: (cb) => {
+    const listener = (_event: Electron.IpcRendererEvent, chats: UiChat[]) => cb(chats)
+    ipcRenderer.on('tg:chats-changed', listener)
+    return () => ipcRenderer.off('tg:chats-changed', listener)
+  },
+  getPendingRequests: () => ipcRenderer.invoke('admin:get-pending'),
+  approvePending: (kind, id) => ipcRenderer.invoke('admin:approve-pending', kind, id),
+  rejectPending: (kind, id) => ipcRenderer.invoke('admin:reject-pending', kind, id),
+  searchContacts: (query) => ipcRenderer.invoke('admin:search-contacts', query),
+  addToWhitelist: (kind, id) => ipcRenderer.invoke('admin:add-to-whitelist', kind, id),
 }
 
 contextBridge.exposeInMainWorld('minigram', api)

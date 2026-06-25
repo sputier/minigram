@@ -2,7 +2,14 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { ensureWhitelistFile, isChatAllowed, isUserAllowed, loadWhitelist } from './whitelist'
+import {
+  addChatToWhitelist,
+  addUserToWhitelist,
+  ensureWhitelistFile,
+  isChatAllowed,
+  isUserAllowed,
+  loadWhitelist,
+} from './whitelist'
 
 describe('isChatAllowed / isUserAllowed', () => {
   const whitelist = { allowed_user_ids: [111], allowed_chat_ids: [-1001] }
@@ -27,6 +34,35 @@ describe('isChatAllowed / isUserAllowed', () => {
     const empty = { allowed_user_ids: [], allowed_chat_ids: [] }
     expect(isChatAllowed(empty, -1001)).toBe(false)
     expect(isUserAllowed(empty, 111)).toBe(false)
+  })
+})
+
+describe('addUserToWhitelist / addChatToWhitelist', () => {
+  it('ajoute un user absent', () => {
+    const whitelist = { allowed_user_ids: [1], allowed_chat_ids: [] }
+    expect(addUserToWhitelist(whitelist, 2)).toEqual({ allowed_user_ids: [1, 2], allowed_chat_ids: [] })
+  })
+
+  it('ne duplique pas un user déjà présent (no-op)', () => {
+    const whitelist = { allowed_user_ids: [1], allowed_chat_ids: [] }
+    expect(addUserToWhitelist(whitelist, 1)).toBe(whitelist)
+  })
+
+  it('ajoute un chat absent', () => {
+    const whitelist = { allowed_user_ids: [], allowed_chat_ids: [-1001] }
+    expect(addChatToWhitelist(whitelist, -2002)).toEqual({ allowed_user_ids: [], allowed_chat_ids: [-1001, -2002] })
+  })
+
+  it('ne duplique pas un chat déjà présent (no-op)', () => {
+    const whitelist = { allowed_user_ids: [], allowed_chat_ids: [-1001] }
+    expect(addChatToWhitelist(whitelist, -1001)).toBe(whitelist)
+  })
+
+  it("n'altère pas l'objet d'entrée", () => {
+    const whitelist = { allowed_user_ids: [1], allowed_chat_ids: [-1001] }
+    addUserToWhitelist(whitelist, 2)
+    addChatToWhitelist(whitelist, -2002)
+    expect(whitelist).toEqual({ allowed_user_ids: [1], allowed_chat_ids: [-1001] })
   })
 })
 

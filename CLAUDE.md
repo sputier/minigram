@@ -84,7 +84,7 @@ renderer/ (React)
 
 \### Whitelist contacts/groupes
 
-\- Fichier de config `whitelist.json` éditable uniquement par le parent (hors de l'app) :
+\- Fichier de config `whitelist.json` (dans `userData`), schéma inchangé :
 
 &#x20; ```json
 
@@ -100,15 +100,43 @@ renderer/ (React)
 
 \- L'UI \*\*n'affiche que\*\* les chats dont l'`id` est dans la whitelist
 
-\- Les messages entrants d'inconnus sont ignorés silencieusement (pas de notification, pas d'affichage)
+\- Le fichier peut être édité à la main par le parent (hors de l'app), \*\*et/ou\*\* rempli automatiquement par l'app elle-même :
+
+&#x20; - \*\*Seed initial\*\* : à la toute première connexion réussie, si `whitelist.json` est encore vide, toutes les discussions déjà existantes sur le compte sont considérées comme des contacts légitimes déjà ajoutés par le parent, et auto-whitelistées (`seedWhitelistIfEmpty` dans `electron/telegram/client.ts`). Ne se déclenche qu'une fois (tant que le fichier reste non vide).
+
+&#x20; - \*\*Actions admin\*\* : approuver une demande en attente, ou ajouter un résultat de recherche, écrit aussi dans ce fichier (voir sections ci-dessous).
+
+\- Les messages entrants d'un chat/contact ni whitelisté ni en attente sont ignorés silencieusement (pas de notification, pas d'affichage)
 
 
 
-\### Fonctionnalités désactivées dans l'UI
+\### Demandes en attente (`pending-chats.json`)
 
-\- Recherche globale Telegram (pas de `searchPublicChats`)
+\- Fichier dans `userData`, géré uniquement par l'app (jamais édité à la main en usage normal) :
 
-\- Découverte de contacts, suggestions
+&#x20; ```json
+
+&#x20; {
+
+&#x20;   "pending": \[{ "kind": "user", "id": 123, "name": "...", "preview": "...", "firstSeen": 1700000000 }],
+
+&#x20;   "blocked": \[{ "kind": "user", "id": 456 }]
+
+&#x20; }
+
+&#x20; ```
+
+\- Le premier message d'un chat/contact ni whitelisté ni bloqué crée une entrée `pending` (dédupliquée par id) — l'enfant ne voit jamais ces discussions ni ces messages.
+
+\- Le parent valide (`Approuver` → ajout à `whitelist.json`) ou rejette (`Rejeter` → ajout à `blocked`, \*\*blocage permanent\*\* : ce contact ne redéclenchera plus jamais de demande) exclusivement depuis le gate admin caché.
+
+
+
+\### Fonctionnalités désactivées dans l'UI (enfant)
+
+\- Recherche globale Telegram (`searchPublicChats`, `searchContacts`) — \*\*sauf\*\* dans le gate admin (voir ci-dessous), réservée au parent
+
+\- Découverte de contacts, suggestions — même nuance : interdit pour l'enfant, disponible pour le parent via le gate admin pour gérer la whitelist
 
 \- Accès aux chaînes/groupes publics
 
@@ -245,6 +273,16 @@ contextBridge.exposeInMainWorld('telegram', {
 
 
 Le main process filtre \*\*toujours\*\* par whitelist avant de transmettre un update au renderer.
+
+
+
+Canaux additionnels (gate admin, protégés par mot de passe + raccourci caché `Ctrl+Alt+Shift+P`) :
+
+\- `admin:get-pending` / `admin:approve-pending` / `admin:reject-pending` — gestion des demandes en attente
+
+\- `admin:search-contacts` / `admin:add-to-whitelist` — recherche et ajout proactif réservés au parent
+
+\- `tg:chats-changed` — rediffusion de la liste de chats vers le renderer après une action admin (approbation/ajout), pour que l'UI enfant se mette à jour sans redémarrage
 
 
 

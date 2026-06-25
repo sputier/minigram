@@ -3,8 +3,44 @@ import { app } from 'electron'
 import * as tdl from 'tdl'
 import type { LoginUser } from 'tdl'
 import { getTdjson } from 'prebuilt-tdlib'
-import { ensureWhitelistFile, loadWhitelist, isChatAllowed, type Whitelist } from './whitelist'
-import { isChatObjectAllowed, mapChat, mapMessage, mapUpdate, mapUser, type MappedUpdate, type TdChat, type TdMessage, type TdUpdate, type TdUser, type UiChat, type UiMessage, type UiSelf } from './mapUpdate'
+import {
+  addChatToWhitelist,
+  addUserToWhitelist,
+  ensureWhitelistFile,
+  loadWhitelist,
+  isChatAllowed,
+  isUserAllowed,
+  saveWhitelist,
+  type Whitelist,
+} from './whitelist'
+import {
+  addBlocked,
+  addPending,
+  ensurePendingStoreFile,
+  isBlocked,
+  loadPendingStore,
+  removePending,
+  savePendingStore,
+  type PendingEntry,
+  type PendingStore,
+} from './pendingRequests'
+import {
+  extractPendingCandidate,
+  isChatObjectAllowed,
+  mapChat,
+  mapMessage,
+  mapUpdate,
+  mapUser,
+  type MappedUpdate,
+  type PendingCandidate,
+  type TdChat,
+  type TdMessage,
+  type TdUpdate,
+  type TdUser,
+  type UiChat,
+  type UiMessage,
+  type UiSelf,
+} from './mapUpdate'
 
 tdl.configure({ tdjson: getTdjson() })
 
@@ -28,6 +64,9 @@ let whitelist: Whitelist = { allowed_user_ids: [], allowed_chat_ids: [] }
 let whitelistPath = ''
 let allowedChatIdsCache = new Set<number>()
 
+let pendingStore: PendingStore = { pending: [], blocked: [] }
+let pendingStorePath = ''
+
 let pendingPhone: Deferred<string> | null = null
 let pendingCode: Deferred<string> | null = null
 let pendingPassword: Deferred<string> | null = null
@@ -50,6 +89,10 @@ export function startClient(options: StartClientOptions): void {
   whitelistPath = path.join(app.getPath('userData'), 'whitelist.json')
   ensureWhitelistFile(whitelistPath)
   whitelist = loadWhitelist(whitelistPath)
+
+  pendingStorePath = path.join(app.getPath('userData'), 'pending-chats.json')
+  ensurePendingStoreFile(pendingStorePath)
+  pendingStore = loadPendingStore(pendingStorePath)
 
   if (!options.apiId || !options.apiHash || !options.databaseEncryptionKey) {
     console.error(
@@ -94,14 +137,82 @@ export function startClient(options: StartClientOptions): void {
 
     const mapped = mapUpdate(raw, whitelist)
     if (mapped) onMappedUpdate(mapped)
+
+    const candidate = extractPendingCandidate(raw, whitelist)
+    if (candidate) void enqueuePendingCandidate(candidate)
   })
 }
 
 function handleAuthorizationState(state: string | undefined): void {
   if (state === 'authorizationStateReady') {
-    onAuthStateChange({ step: 'ready' })
+    void seedWhitelistIfEmpty()
+      .catch((err) => console.error('[telegram] seed whitelist échoué', err))
+      .finally(() => onAuthStateChange({ step: 'ready' }))
   } else if (state === 'authorizationStateClosed') {
     onAuthStateChange({ step: 'error', message: 'Session Telegram fermée' })
+  }
+}
+
+// Au tout premier démarrage (whitelist.json encore vide), les discussions
+// déjà existantes au moment de la connexion sont considérées comme des
+// contacts légitimes déjà ajoutés par le parent — elles sont donc autorisées
+// automatiquement, sans validation manuelle. Tout ce qui arrive APRÈS reste
+// soumis au flow de demande en attente (cf enqueuePendingCandidate).
+async function seedWhitelistIfEmpty(): Promise<void> {
+  if (!client) return
+  whitelist = loadWhitelist(whitelistPath)
+  if (whitelist.allowed_user_ids.length > 0 || whitelist.allowed_chat_ids.length > 0) return
+
+  const result = await client.invoke({ _: 'getChats', chat_list: { _: 'chatListMain' }, limit: 200 })
+  let seeded: Whitelist = { allowed_user_ids: [], allowed_chat_ids: [] }
+  for (const chatId of result.chat_ids) {
+    const chat = (await client.invoke({ _: 'getChat', chat_id: chatId })) as unknown as TdChat
+    if (chat.type?._ === 'chatTypePrivate' && typeof chat.type.user_id === 'number') {
+      seeded = addUserToWhitelist(seeded, chat.type.user_id)
+    } else {
+      seeded = addChatToWhitelist(seeded, chat.id)
+    }
+  }
+  whitelist = seeded
+  saveWhitelist(whitelistPath, whitelist)
+}
+
+// Enrichit le candidat détecté (nom réel via getUser/getChat, fallback sur
+// le placeholder si l'appel échoue) puis le persiste — fire-and-forget,
+// appelé depuis le handler synchrone d'updates.
+async function enqueuePendingCandidate(candidate: PendingCandidate): Promise<void> {
+  if (!client) return
+
+  // Recharge la whitelist la plus fraîche : entre la détection (synchrone,
+  // au moment de l'update) et cet appel async, le seed initial peut avoir
+  // fini d'écrire whitelist.json — il ne faut pas mettre en attente un id
+  // devenu entre-temps légitimement autorisé.
+  whitelist = loadWhitelist(whitelistPath)
+  const nowAllowed =
+    candidate.kind === 'user' ? isUserAllowed(whitelist, candidate.id) : isChatAllowed(whitelist, candidate.id)
+  if (nowAllowed) return
+
+  pendingStore = loadPendingStore(pendingStorePath)
+  if (isBlocked(pendingStore, candidate.kind, candidate.id)) return
+
+  let name = candidate.name
+  try {
+    if (candidate.kind === 'user') {
+      const user = (await client.invoke({ _: 'getUser', user_id: candidate.id })) as unknown as TdUser
+      name = mapUser(user).name
+    } else {
+      const chat = (await client.invoke({ _: 'getChat', chat_id: candidate.id })) as unknown as TdChat
+      name = chat.title || name
+    }
+  } catch {
+    // Garde le placeholder si le lookup échoue — n'empêche pas la mise en attente.
+  }
+
+  const entry: PendingEntry = { ...candidate, name, firstSeen: Math.floor(Date.now() / 1000) }
+  const updated = addPending(pendingStore, entry)
+  if (updated !== pendingStore) {
+    pendingStore = updated
+    savePendingStore(pendingStorePath, pendingStore)
   }
 }
 
@@ -198,4 +309,70 @@ export async function sendMessage(chatId: number, text: string): Promise<void> {
       text: { _: 'formattedText', text, entities: [] },
     },
   })
+}
+
+export function getPendingRequests(): PendingEntry[] {
+  pendingStore = loadPendingStore(pendingStorePath)
+  return pendingStore.pending
+}
+
+export function approvePending(kind: 'user' | 'chat', id: number): void {
+  pendingStore = loadPendingStore(pendingStorePath)
+  whitelist = loadWhitelist(whitelistPath)
+
+  whitelist = kind === 'user' ? addUserToWhitelist(whitelist, id) : addChatToWhitelist(whitelist, id)
+  saveWhitelist(whitelistPath, whitelist)
+
+  pendingStore = removePending(pendingStore, kind, id)
+  savePendingStore(pendingStorePath, pendingStore)
+}
+
+// Rejeter bloque définitivement : l'id ne redéclenchera plus jamais de
+// demande, même si la même personne écrit à nouveau (décision produit
+// confirmée — réversible seulement en éditant pending-chats.json à la main).
+export function rejectPending(kind: 'user' | 'chat', id: number): void {
+  pendingStore = loadPendingStore(pendingStorePath)
+  pendingStore = removePending(pendingStore, kind, id)
+  pendingStore = addBlocked(pendingStore, kind, id)
+  savePendingStore(pendingStorePath, pendingStore)
+}
+
+export function addToWhitelist(kind: 'user' | 'chat', id: number): void {
+  whitelist = loadWhitelist(whitelistPath)
+  whitelist = kind === 'user' ? addUserToWhitelist(whitelist, id) : addChatToWhitelist(whitelist, id)
+  saveWhitelist(whitelistPath, whitelist)
+
+  // Un id whitelisté ne doit jamais rester simultanément en attente.
+  pendingStore = loadPendingStore(pendingStorePath)
+  pendingStore = removePending(pendingStore, kind, id)
+  savePendingStore(pendingStorePath, pendingStore)
+}
+
+export interface SearchResult {
+  kind: 'user' | 'chat'
+  id: number
+  name: string
+}
+
+// Recherche globale réservée au parent (gate admin protégé par mot de
+// passe) — jamais exposée à l'enfant. Combine les contacts déjà connus du
+// compte et la recherche publique Telegram.
+export async function searchContacts(query: string): Promise<SearchResult[]> {
+  if (!client || !query.trim()) return []
+
+  const [contacts, publicChats] = await Promise.all([
+    client.invoke({ _: 'searchContacts', query, limit: 20 }),
+    client.invoke({ _: 'searchPublicChats', query }).catch(() => ({ chat_ids: [] as number[] })),
+  ])
+
+  const results: SearchResult[] = []
+  for (const userId of contacts.user_ids) {
+    const user = (await client.invoke({ _: 'getUser', user_id: userId })) as unknown as TdUser
+    results.push({ kind: 'user', id: userId, name: mapUser(user).name })
+  }
+  for (const chatId of publicChats.chat_ids) {
+    const chat = (await client.invoke({ _: 'getChat', chat_id: chatId })) as unknown as TdChat
+    results.push({ kind: 'chat', id: chatId, name: chat.title })
+  }
+  return results
 }
