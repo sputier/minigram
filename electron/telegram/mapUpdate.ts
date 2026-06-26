@@ -13,7 +13,7 @@ export interface TdMessageContent {
   emoji?: string
   photo?: { _: 'photo'; sizes: Array<{ _: 'photoSize'; photo: TdFile; width: number; height: number }> }
   video?: { _: 'video'; video: TdFile; mime_type?: string; file_name?: string }
-  voice_note?: { _: 'voiceNote'; voice_note: TdFile; mime_type?: string }
+  voice_note?: { _: 'voiceNote'; voice: TdFile; mime_type?: string }
   document?: { _: 'document'; document: TdFile; mime_type?: string; file_name?: string }
   sticker?: { _: 'sticker'; sticker: TdFile }
   animation?: { _: 'animation'; animation: TdFile; mime_type?: string; file_name?: string }
@@ -204,7 +204,7 @@ export function extractMedia(content?: TdMessageContent): UiMediaRef | null {
         : null
     }
     case 'messageVoiceNote': {
-      const file = content.voice_note?.voice_note
+      const file = content.voice_note?.voice
       return file ? { fileId: file.id, kind: 'voice', mimeType: content.voice_note?.mime_type } : null
     }
     case 'messageDocument': {
