@@ -10,6 +10,7 @@ export interface TdMessageContent {
   _: string
   text?: { _: string; text: string }
   caption?: { _: string; text: string }
+  emoji?: string
   photo?: { _: 'photo'; sizes: Array<{ _: 'photoSize'; photo: TdFile; width: number; height: number }> }
   video?: { _: 'video'; video: TdFile; mime_type?: string; file_name?: string }
   voice_note?: { _: 'voiceNote'; voice_note: TdFile; mime_type?: string }
@@ -166,6 +167,7 @@ const MEDIA_LABELS: Record<string, string> = {
 function extractText(content?: TdMessageContent): string {
   if (!content) return ''
   if (content._ === 'messageText' && content.text) return content.text.text
+  if (content._ === 'messageAnimatedEmoji' && content.emoji) return content.emoji
   if (content.caption?.text) return content.caption.text
   return ''
 }
