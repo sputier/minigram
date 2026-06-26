@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface AvatarProps {
   photoFileId?: number | null
@@ -11,17 +11,30 @@ interface AvatarProps {
 
 export default function Avatar({ photoFileId, initials, color, className = '', title, version = 0 }: AvatarProps) {
   const [imgFailed, setImgFailed] = useState(false)
-  const src = photoFileId ? `minigram-media://media?id=${photoFileId}&v=${version}` : null
+  const [retryCount, setRetryCount] = useState(0)
+  // Ref pour lire l'état d'échec dans l'effet sans l'ajouter aux deps
+  // (évite de re-setter src pour les avatars qui s'affichent déjà correctement)
+  const failedRef = useRef(false)
+
+  const src = photoFileId ? `minigram-media://media?id=${photoFileId}&v=${retryCount}` : null
+
+  const handleError = () => {
+    failedRef.current = true
+    setImgFailed(true)
+  }
 
   useEffect(() => {
+    if (!failedRef.current) return
+    failedRef.current = false
     setImgFailed(false)
-  }, [src])
+    setRetryCount((c) => c + 1)
+  }, [version])
 
   if (src && !imgFailed) {
     return (
       <img
         src={src}
-        onError={() => setImgFailed(true)}
+        onError={handleError}
         title={title}
         className={`flex-shrink-0 rounded-full object-cover ${className}`}
       />
