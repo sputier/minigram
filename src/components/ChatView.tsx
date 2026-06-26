@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { UiChat, UiMediaRef, UiMessage } from '../types/telegram'
+import type { UiChat, UiMediaRef, UiMessage, UiReaction, UiUserAvatar } from '../types/telegram'
 
 interface ChatViewProps {
   chat: UiChat | undefined
@@ -65,6 +65,61 @@ function Lightbox({ media, src, onClose }: LightboxProps) {
         )}
       </div>
     </div>
+  )
+}
+
+function UserAvatarMini({ avatar }: { avatar: UiUserAvatar }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const src = avatar.photoFileId ? `minigram-media://media?id=${avatar.photoFileId}&v=0` : null
+
+  if (src && !imgFailed) {
+    return (
+      <img
+        src={src}
+        onError={() => setImgFailed(true)}
+        className="-ml-1 first:ml-0 h-[18px] w-[18px] rounded-full object-cover ring-1 ring-tg-bg"
+      />
+    )
+  }
+
+  return (
+    <div
+      className="-ml-1 first:ml-0 flex h-[18px] w-[18px] items-center justify-center rounded-full text-[8px] font-bold text-white ring-1 ring-tg-bg"
+      style={{ backgroundColor: avatar.color }}
+    >
+      {avatar.initials}
+    </div>
+  )
+}
+
+function ReactionPill({ reaction }: { reaction: UiReaction }) {
+  const [avatars, setAvatars] = useState<UiUserAvatar[]>([])
+
+  useEffect(() => {
+    if (reaction.recentSenderIds.length === 0) return
+    let cancelled = false
+    window.minigram.getUserAvatars(reaction.recentSenderIds).then((result) => {
+      if (!cancelled) setAvatars(result)
+    })
+    return () => { cancelled = true }
+  }, [reaction.recentSenderIds.join(',')])
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+        reaction.chosen
+          ? 'bg-tg-accent/30 text-tg-accent ring-1 ring-tg-accent/50'
+          : 'bg-white/10 text-white/80'
+      }`}
+    >
+      <span>{reaction.emoji}</span>
+      {avatars.length > 0 && (
+        <span className="flex items-center">
+          {avatars.map((a) => <UserAvatarMini key={a.userId} avatar={a} />)}
+        </span>
+      )}
+      {reaction.count > 1 && <span className="font-medium">{reaction.count}</span>}
+    </span>
   )
 }
 
@@ -238,7 +293,7 @@ export default function ChatView({
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`flex ${message.outgoing ? 'justify-end' : 'justify-start'}`}
+                className={`flex flex-col ${message.outgoing ? 'items-end' : 'items-start'}`}
               >
                 <div
                   className={`max-w-[60%] rounded-xl px-3 py-2 text-sm text-white shadow ${
@@ -259,6 +314,13 @@ export default function ChatView({
                   {message.text && <div>{message.text}</div>}
                   <div className="mt-1 text-right text-[10px] text-white/50">{message.time}</div>
                 </div>
+                {message.reactions && message.reactions.length > 0 && (
+                  <div className={`-mt-1 mb-1 flex flex-wrap gap-1 ${message.outgoing ? 'justify-end' : 'justify-start'}`}>
+                    {message.reactions.map((r) => (
+                      <ReactionPill key={r.emoji} reaction={r} />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             <div ref={bottomRef} />

@@ -7,6 +7,20 @@ export interface UiMediaRef {
   fileName?: string
 }
 
+export interface UiReaction {
+  emoji: string
+  count: number
+  chosen: boolean
+  recentSenderIds: number[]
+}
+
+export interface UiUserAvatar {
+  userId: number
+  photoFileId: number | null
+  initials: string
+  color: string
+}
+
 export interface UiMessage {
   id: number
   chatId: number
@@ -14,6 +28,7 @@ export interface UiMessage {
   time: string
   outgoing: boolean
   media?: UiMediaRef
+  reactions?: UiReaction[]
 }
 
 export interface UiChat {
@@ -36,6 +51,7 @@ export interface UiSelf {
 export type MappedUpdate =
   | { kind: 'chat-last-message'; chatId: number; lastMessage: string; time: string }
   | { kind: 'new-message'; message: UiMessage }
+  | { kind: 'message-reactions'; chatId: number; messageId: number; reactions: UiReaction[] }
   | { kind: 'connection-state'; state: string }
   | { kind: 'user-status'; userId: number; status: string }
 

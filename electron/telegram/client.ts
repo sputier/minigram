@@ -42,6 +42,7 @@ import {
   type MediaSyncState,
 } from './mediaSync'
 import {
+  colorForId,
   extractMedia,
   extractPendingCandidate,
   isChatObjectAllowed,
@@ -628,6 +629,38 @@ export interface SearchResult {
   kind: 'user' | 'chat'
   id: number
   name: string
+}
+
+export interface UiUserAvatar {
+  userId: number
+  photoFileId: number | null
+  initials: string
+  color: string
+}
+
+export async function getUserAvatars(userIds: number[]): Promise<UiUserAvatar[]> {
+  if (!client) return []
+  return Promise.all(
+    userIds.map(async (userId) => {
+      try {
+        const user = (await client!.invoke({ _: 'getUser', user_id: userId })) as unknown as TdUser
+        const { initials, color } = mapUser(user)
+        let photoFileId: number | null = null
+        const smallId = user.profile_photo?.small?.id
+        if (smallId) {
+          try {
+            await client!.invoke({ _: 'downloadFile', file_id: smallId, priority: 1, offset: 0, limit: 0, synchronous: true })
+            photoFileId = smallId
+          } catch {
+            // photo indisponible, fallback sur les initiales
+          }
+        }
+        return { userId, photoFileId, initials, color }
+      } catch {
+        return { userId, photoFileId: null, initials: '?', color: colorForId(userId) }
+      }
+    }),
+  )
 }
 
 // Recherche globale réservée au parent (gate admin protégé par mot de

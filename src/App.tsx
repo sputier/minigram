@@ -79,6 +79,14 @@ export default function App() {
             c.id === chatId ? { ...c, lastMessage: update.message.text, time: update.message.time } : c,
           ),
         )
+      } else if (update.kind === 'message-reactions') {
+        const { chatId, messageId, reactions } = update
+        setMessagesByChat((prev) => ({
+          ...prev,
+          [chatId]: (prev[chatId] ?? []).map((m) =>
+            m.id === messageId ? { ...m, reactions: reactions.length > 0 ? reactions : undefined } : m,
+          ),
+        }))
       } else if (update.kind === 'chat-last-message') {
         setChats((prev) =>
           prev.map((c) =>

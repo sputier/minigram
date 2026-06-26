@@ -18,6 +18,22 @@ export interface TdMessageContent {
   animation?: { _: 'animation'; animation: TdFile; mime_type?: string; file_name?: string }
 }
 
+interface TdReactionTypeEmoji {
+  _: 'reactionTypeEmoji'
+  emoji: string
+}
+
+interface TdMessageReaction {
+  type: TdReactionTypeEmoji | { _: string }
+  total_count: number
+  is_chosen?: boolean
+  recent_sender_ids?: Array<{ _: string; user_id?: number }>
+}
+
+interface TdMessageInteractionInfo {
+  reactions?: { reactions: TdMessageReaction[] }
+}
+
 export interface TdMessageSender {
   _: 'messageSenderUser' | 'messageSenderChat'
   user_id?: number
@@ -32,6 +48,7 @@ export interface TdMessage {
   is_outgoing?: boolean
   date?: number
   content?: TdMessageContent
+  interaction_info?: TdMessageInteractionInfo
 }
 
 export interface TdChatType {
@@ -65,6 +82,13 @@ export interface UiMediaRef {
   fileName?: string
 }
 
+export interface UiReaction {
+  emoji: string
+  count: number
+  chosen: boolean
+  recentSenderIds: number[]
+}
+
 export interface UiMessage {
   id: number
   chatId: number
@@ -72,6 +96,7 @@ export interface UiMessage {
   time: string
   outgoing: boolean
   media?: UiMediaRef
+  reactions?: UiReaction[]
 }
 
 export interface UiChat {
@@ -89,6 +114,7 @@ export interface TdUser {
   id: number
   first_name: string
   last_name?: string
+  profile_photo?: { small?: { id: number } }
 }
 
 export interface UiSelf {
@@ -101,6 +127,7 @@ export interface UiSelf {
 export type MappedUpdate =
   | { kind: 'chat-last-message'; chatId: number; lastMessage: string; time: string }
   | { kind: 'new-message'; message: UiMessage }
+  | { kind: 'message-reactions'; chatId: number; messageId: number; reactions: UiReaction[] }
   | { kind: 'connection-state'; state: string }
   | { kind: 'user-status'; userId: number; status: string }
 
@@ -202,7 +229,7 @@ function formatTime(unixSeconds?: number): string {
   return new Date(unixSeconds * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }
 
-function colorForId(id: number): string {
+export function colorForId(id: number): string {
   const index = Math.abs(id) % AVATAR_COLORS.length
   return AVATAR_COLORS[index]
 }
@@ -216,8 +243,26 @@ function senderUserId(message: TdMessage): number | undefined {
   return message.sender_id?._ === 'messageSenderUser' ? message.sender_id.user_id : undefined
 }
 
+function extractReactions(info?: TdMessageInteractionInfo): UiReaction[] | undefined {
+  const raw = info?.reactions?.reactions
+  if (!raw?.length) return undefined
+  const result = raw
+    .filter((r): r is TdMessageReaction & { type: TdReactionTypeEmoji } => r.type._ === 'reactionTypeEmoji' && r.total_count > 0)
+    .map((r) => ({
+      emoji: r.type.emoji,
+      count: r.total_count,
+      chosen: Boolean(r.is_chosen),
+      recentSenderIds: (r.recent_sender_ids ?? [])
+        .filter((s) => s._ === 'messageSenderUser' && typeof s.user_id === 'number')
+        .map((s) => s.user_id as number)
+        .slice(0, 3),
+    }))
+  return result.length > 0 ? result : undefined
+}
+
 export function mapMessage(message: TdMessage): UiMessage {
   const media = extractMedia(message.content)
+  const reactions = extractReactions(message.interaction_info)
   return {
     id: message.id,
     chatId: message.chat_id,
@@ -225,6 +270,7 @@ export function mapMessage(message: TdMessage): UiMessage {
     time: formatTime(message.date),
     outgoing: Boolean(message.is_outgoing),
     ...(media ? { media } : {}),
+    ...(reactions ? { reactions } : {}),
   }
 }
 
@@ -300,6 +346,15 @@ export function mapUpdate(update: TdUpdate, whitelist: Whitelist): MappedUpdate 
         if (!message || typeof message.chat_id !== 'number') return null
         if (!isMessageAllowed(message, whitelist)) return null
         return { kind: 'new-message', message: mapMessage(message) }
+      }
+      case 'updateMessageInteractionInfo': {
+        const chatId = (update as { chat_id?: number }).chat_id
+        if (typeof chatId !== 'number' || !isChatAllowed(whitelist, chatId)) return null
+        const messageId = (update as { message_id?: number }).message_id
+        if (typeof messageId !== 'number') return null
+        const info = (update as { interaction_info?: TdMessageInteractionInfo }).interaction_info
+        const reactions = extractReactions(info) ?? []
+        return { kind: 'message-reactions', chatId, messageId, reactions }
       }
       case 'updateChatLastMessage': {
         const chatId = (update as { chat_id?: number }).chat_id

@@ -1,4 +1,4 @@
-import type { AuthState, MappedUpdate, PendingEntry, SearchResult, SyncProgress, UiChat, UiMessage, UiSelf } from './telegram'
+import type { AuthState, MappedUpdate, PendingEntry, SearchResult, SyncProgress, UiChat, UiMessage, UiSelf, UiUserAvatar } from './telegram'
 
 type Unsubscribe = () => void
 
@@ -26,6 +26,7 @@ declare global {
       rejectPending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>
       searchContacts: (query: string) => Promise<SearchResult[]>
       addToWhitelist: (kind: 'user' | 'chat', id: number) => Promise<void>
+      getUserAvatars: (userIds: number[]) => Promise<UiUserAvatar[]>
     }
   }
 }

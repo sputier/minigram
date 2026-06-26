@@ -12,6 +12,7 @@ import {
   getMe,
   getMoreHistory,
   getPendingRequests,
+  getUserAvatars,
   rejectPending,
   resolveFilePath,
   searchContacts,
@@ -23,6 +24,7 @@ import {
   submitPhoneNumber,
   type AuthState,
   type SyncProgress,
+  type UiUserAvatar,
 } from './telegram/client'
 import type { MappedUpdate, UiChat } from './telegram/mapUpdate'
 
@@ -192,6 +194,8 @@ ipcMain.handle('admin:reject-pending', (_event, kind: 'user' | 'chat', id: numbe
   rejectPending(kind, id)
   return getPendingRequests()
 })
+
+ipcMain.handle('tg:get-user-avatars', (_event, userIds: number[]) => getUserAvatars(userIds))
 
 ipcMain.handle('admin:search-contacts', (_event, query: string) => searchContacts(query))
 

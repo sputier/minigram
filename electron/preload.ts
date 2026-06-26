@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AuthState, SearchResult, SyncProgress } from './telegram/client'
+import type { AuthState, SearchResult, SyncProgress, UiUserAvatar } from './telegram/client'
 import type { MappedUpdate, UiChat, UiMessage, UiSelf } from './telegram/mapUpdate'
 import type { PendingEntry } from './telegram/pendingRequests'
 
@@ -27,6 +27,7 @@ export interface MinigramApi {
   rejectPending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>
   searchContacts: (query: string) => Promise<SearchResult[]>
   addToWhitelist: (kind: 'user' | 'chat', id: number) => Promise<void>
+  getUserAvatars: (userIds: number[]) => Promise<UiUserAvatar[]>
 }
 
 const api: MinigramApi = {
@@ -75,6 +76,7 @@ const api: MinigramApi = {
   rejectPending: (kind, id) => ipcRenderer.invoke('admin:reject-pending', kind, id),
   searchContacts: (query) => ipcRenderer.invoke('admin:search-contacts', query),
   addToWhitelist: (kind, id) => ipcRenderer.invoke('admin:add-to-whitelist', kind, id),
+  getUserAvatars: (userIds) => ipcRenderer.invoke('tg:get-user-avatars', userIds),
 }
 
 contextBridge.exposeInMainWorld('minigram', api)
