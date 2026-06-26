@@ -29,6 +29,8 @@ declare global {
       getUserAvatars: (userIds: number[]) => Promise<UiUserAvatar[]>
       addReaction: (chatId: number, messageId: number, emoji: string) => Promise<void>
       removeReaction: (chatId: number, messageId: number, emoji: string) => Promise<void>
+      getGroupMembers: (chatId: number) => Promise<UiUserAvatar[]>
+      openPrivateChat: (userId: number) => Promise<UiChat | null>
     }
   }
 }

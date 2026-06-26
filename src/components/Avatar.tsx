@@ -6,6 +6,7 @@ interface AvatarProps {
   color: string
   className?: string
   title?: string
+  onClick?: () => void
   // fileId spécifique qui vient de se télécharger — Avatar ne réessaie QUE
   // si c'est exactement son propre photoFileId, évitant les faux retries
   // (et le clignotement) provoqués par d'autres médias qui se téléchargent.
@@ -18,6 +19,7 @@ export default function Avatar({
   color,
   className = '',
   title,
+  onClick,
   latestReadyFileId,
 }: AvatarProps) {
   const [imgFailed, setImgFailed] = useState(false)
@@ -45,6 +47,7 @@ export default function Avatar({
         src={src}
         onError={handleError}
         title={title}
+        onClick={onClick}
         className={`flex-shrink-0 rounded-full object-cover ${className}`}
       />
     )
@@ -53,6 +56,7 @@ export default function Avatar({
   return (
     <div
       title={title}
+      onClick={onClick}
       className={`flex flex-shrink-0 items-center justify-center rounded-full font-medium text-white ${className}`}
       style={{ backgroundColor: color }}
     >

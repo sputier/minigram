@@ -9,11 +9,13 @@ import {
   addToWhitelist,
   approvePending,
   getChats,
+  getGroupMembers,
   getHistory,
   getMe,
   getMoreHistory,
   getPendingRequests,
   getUserAvatars,
+  openPrivateChat,
   rejectPending,
   removeReaction,
   resolveFilePath,
@@ -210,6 +212,14 @@ ipcMain.handle('tg:add-reaction', (_event, chatId: number, messageId: number, em
 ipcMain.handle('tg:remove-reaction', (_event, chatId: number, messageId: number, emoji: string) =>
   removeReaction(chatId, messageId, emoji),
 )
+
+ipcMain.handle('tg:get-group-members', (_event, chatId: number) => getGroupMembers(chatId))
+
+ipcMain.handle('tg:open-private-chat', async (_event, userId: number) => {
+  const chat = await openPrivateChat(userId)
+  broadcastChats(await getChats())
+  return chat
+})
 
 ipcMain.handle('admin:search-contacts', (_event, query: string) => searchContacts(query))
 

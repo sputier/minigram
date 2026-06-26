@@ -139,6 +139,11 @@ export default function App() {
     else void window.minigram.addReaction(chatId, messageId, emoji)
   }
 
+  async function handleOpenPrivateChat(userId: number) {
+    const chat = await window.minigram.openPrivateChat(userId)
+    if (chat) setActiveChatId(chat.id)
+  }
+
   async function handleLoadMore() {
     if (activeChatId === undefined || loadingMore) return
     const oldest = messagesByChat[activeChatId]?.[0]?.id
@@ -166,6 +171,7 @@ export default function App() {
         messages={activeChatId !== undefined ? messagesByChat[activeChatId] ?? [] : []}
         onSend={handleSend}
         onReactionToggle={handleReactionToggle}
+        onOpenPrivateChat={handleOpenPrivateChat}
         emptyMessage={emptyMessage}
         onLoadMore={handleLoadMore}
         hasMore={activeChatId !== undefined ? !noMoreHistory[activeChatId] : false}

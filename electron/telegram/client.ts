@@ -214,6 +214,45 @@ function handleAuthorizationState(state: string | undefined): void {
 // contacts légitimes déjà ajoutés par le parent — elles sont donc autorisées
 // automatiquement, sans validation manuelle. Tout ce qui arrive APRÈS reste
 // soumis au flow de demande en attente (cf enqueuePendingCandidate).
+// Récupère les user_ids des membres d'un groupe (basic ou super), sans I/O.
+async function fetchGroupMemberIds(chat: TdChat): Promise<number[]> {
+  if (!client) return []
+  try {
+    if (chat.type?._ === 'chatTypeBasicGroup' && typeof chat.type.basic_group_id === 'number') {
+      const info = (await client.invoke({ _: 'getBasicGroupFullInfo', basic_group_id: chat.type.basic_group_id })) as any
+      return ((info.members ?? []) as any[])
+        .filter((m: any) => m.member_id?._ === 'messageSenderUser' && typeof m.member_id.user_id === 'number')
+        .map((m: any) => m.member_id.user_id as number)
+    }
+    if (chat.type?._ === 'chatTypeSupergroup' && typeof chat.type.supergroup_id === 'number') {
+      const result = (await client.invoke({ _: 'getSupergroupMembers', supergroup_id: chat.type.supergroup_id, filter: { _: 'supergroupMembersFilterRecent' }, offset: 0, limit: 200 })) as any
+      return ((result.members ?? []) as any[])
+        .filter((m: any) => m.member_id?._ === 'messageSenderUser' && typeof m.member_id.user_id === 'number')
+        .map((m: any) => m.member_id.user_id as number)
+    }
+  } catch (err) {
+    console.error('[telegram] fetchGroupMemberIds échoué', err)
+  }
+  return []
+}
+
+// Ajoute les membres d'un groupe à allowed_user_ids — fire-and-forget safe.
+async function whitelistGroupMembers(chatId: number): Promise<void> {
+  if (!client) return
+  try {
+    const chat = (await client.invoke({ _: 'getChat', chat_id: chatId })) as unknown as TdChat
+    const memberIds = await fetchGroupMemberIds(chat)
+    if (memberIds.length === 0) return
+    whitelist = loadWhitelist(whitelistPath)
+    for (const uid of memberIds) {
+      whitelist = addUserToWhitelist(whitelist, uid)
+    }
+    saveWhitelist(whitelistPath, whitelist)
+  } catch (err) {
+    console.error('[telegram] whitelistGroupMembers échoué pour', chatId, err)
+  }
+}
+
 async function seedWhitelistIfEmpty(): Promise<void> {
   if (!client) return
   whitelist = loadWhitelist(whitelistPath)
@@ -221,16 +260,25 @@ async function seedWhitelistIfEmpty(): Promise<void> {
 
   const result = await client.invoke({ _: 'getChats', chat_list: { _: 'chatListMain' }, limit: 200 })
   let seeded: Whitelist = { allowed_user_ids: [], allowed_chat_ids: [] }
+  const groupChatIds: number[] = []
   for (const chatId of result.chat_ids) {
     const chat = (await client.invoke({ _: 'getChat', chat_id: chatId })) as unknown as TdChat
     if (chat.type?._ === 'chatTypePrivate' && typeof chat.type.user_id === 'number') {
       seeded = addUserToWhitelist(seeded, chat.type.user_id)
     } else {
       seeded = addChatToWhitelist(seeded, chat.id)
+      if (chat.type?._ === 'chatTypeBasicGroup' || chat.type?._ === 'chatTypeSupergroup') {
+        groupChatIds.push(chat.id)
+      }
     }
   }
   whitelist = seeded
   saveWhitelist(whitelistPath, whitelist)
+
+  // Auto-whitelist des membres de chaque groupe seedé.
+  for (const groupId of groupChatIds) {
+    await whitelistGroupMembers(groupId)
+  }
 }
 
 function emitSyncProgress(): void {
@@ -643,6 +691,8 @@ export function approvePending(kind: 'user' | 'chat', id: number): void {
 
   pendingStore = removePending(pendingStore, kind, id)
   savePendingStore(pendingStorePath, pendingStore)
+
+  if (kind === 'chat') void whitelistGroupMembers(id)
 }
 
 // Rejeter bloque définitivement : l'id ne redéclenchera plus jamais de
@@ -664,6 +714,8 @@ export function addToWhitelist(kind: 'user' | 'chat', id: number): void {
   pendingStore = loadPendingStore(pendingStorePath)
   pendingStore = removePending(pendingStore, kind, id)
   savePendingStore(pendingStorePath, pendingStore)
+
+  if (kind === 'chat') void whitelistGroupMembers(id)
 }
 
 export interface SearchResult {
@@ -703,6 +755,29 @@ export async function getUserAvatars(userIds: number[]): Promise<UiUserAvatar[]>
       }
     }),
   )
+}
+
+export async function getGroupMembers(chatId: number): Promise<UiUserAvatar[]> {
+  if (!client) return []
+  try {
+    const chat = (await client.invoke({ _: 'getChat', chat_id: chatId })) as unknown as TdChat
+    const memberIds = await fetchGroupMemberIds(chat)
+    return getUserAvatars(memberIds)
+  } catch (err) {
+    console.error('[telegram] getGroupMembers échoué pour', chatId, err)
+    return []
+  }
+}
+
+export async function openPrivateChat(userId: number): Promise<UiChat | null> {
+  if (!client) return null
+  try {
+    const chat = (await client.invoke({ _: 'createPrivateChat', user_id: userId, force: false })) as unknown as TdChat
+    return mapChat(chat)
+  } catch (err) {
+    console.error('[telegram] openPrivateChat échoué pour user', userId, err)
+    return null
+  }
 }
 
 // Recherche globale réservée au parent (gate admin protégé par mot de

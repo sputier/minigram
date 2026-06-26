@@ -30,6 +30,8 @@ export interface MinigramApi {
   getUserAvatars: (userIds: number[]) => Promise<UiUserAvatar[]>
   addReaction: (chatId: number, messageId: number, emoji: string) => Promise<void>
   removeReaction: (chatId: number, messageId: number, emoji: string) => Promise<void>
+  getGroupMembers: (chatId: number) => Promise<UiUserAvatar[]>
+  openPrivateChat: (userId: number) => Promise<UiChat | null>
 }
 
 const api: MinigramApi = {
@@ -81,6 +83,8 @@ const api: MinigramApi = {
   getUserAvatars: (userIds) => ipcRenderer.invoke('tg:get-user-avatars', userIds),
   addReaction: (chatId, messageId, emoji) => ipcRenderer.invoke('tg:add-reaction', chatId, messageId, emoji),
   removeReaction: (chatId, messageId, emoji) => ipcRenderer.invoke('tg:remove-reaction', chatId, messageId, emoji),
+  getGroupMembers: (chatId) => ipcRenderer.invoke('tg:get-group-members', chatId),
+  openPrivateChat: (userId) => ipcRenderer.invoke('tg:open-private-chat', userId),
 }
 
 contextBridge.exposeInMainWorld('minigram', api)

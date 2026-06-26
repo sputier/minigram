@@ -54,6 +54,8 @@ export interface TdMessage {
 export interface TdChatType {
   _: string
   user_id?: number
+  basic_group_id?: number
+  supergroup_id?: number
 }
 
 export interface TdChat {

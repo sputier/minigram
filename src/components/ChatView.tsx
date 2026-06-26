@@ -38,6 +38,7 @@ interface ChatViewProps {
   messages: UiMessage[]
   onSend: (text: string) => void
   onReactionToggle: ReactionToggle
+  onOpenPrivateChat: (userId: number) => void
   emptyMessage: string
   onLoadMore: () => void
   hasMore: boolean
@@ -276,6 +277,7 @@ export default function ChatView({
   messages,
   onSend,
   onReactionToggle,
+  onOpenPrivateChat,
   emptyMessage,
   onLoadMore,
   hasMore,
@@ -286,9 +288,12 @@ export default function ChatView({
   const [draft, setDraft] = useState('')
   const [lightbox, setLightbox] = useState<{ media: UiMediaRef; src: string } | null>(null)
   const [pickerMsgId, setPickerMsgId] = useState<number | null>(null)
+  const [showMembers, setShowMembers] = useState(false)
+  const [groupMembers, setGroupMembers] = useState<UiUserAvatar[]>([])
   const senderAvatars = useSenderAvatars(messages, chat?.isGroup ?? false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const membersPanelRef = useRef<HTMLDivElement>(null)
   const prevScrollHeightRef = useRef<number | null>(null)
   const prevLastIdRef = useRef<number | null>(null)
 
@@ -317,7 +322,20 @@ export default function ChatView({
 
   useEffect(() => {
     prevScrollHeightRef.current = null
+    setShowMembers(false)
+    setGroupMembers([])
   }, [chat?.id])
+
+  useEffect(() => {
+    if (!showMembers) return
+    function handleMouseDown(e: MouseEvent) {
+      if (membersPanelRef.current && !membersPanelRef.current.contains(e.target as Node)) {
+        setShowMembers(false)
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [showMembers])
 
   if (!chat) {
     return (
@@ -356,6 +374,48 @@ export default function ChatView({
           <div>
             <div className="font-medium text-white">{chat.name}</div>
           </div>
+          {chat.isGroup && (
+            <div ref={membersPanelRef} className="relative ml-auto">
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => {
+                  if (!showMembers && groupMembers.length === 0) {
+                    window.minigram.getGroupMembers(chat.id).then(setGroupMembers)
+                  }
+                  setShowMembers((v) => !v)
+                }}
+                className="flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1.5 text-xs text-tg-muted transition-colors hover:bg-white/10 hover:text-white"
+              >
+                👥{groupMembers.length > 0 ? ` ${groupMembers.length} membres` : ' Membres'}
+              </button>
+              {showMembers && (
+                <div className="absolute right-0 top-full z-30 mt-1 min-w-[200px] rounded-xl bg-[#1e2c3a] py-2 shadow-xl ring-1 ring-white/10">
+                  {groupMembers.length === 0 ? (
+                    <div className="px-4 py-2 text-xs text-tg-muted">Chargement…</div>
+                  ) : (
+                    groupMembers.map((member) => (
+                      <button
+                        key={member.userId}
+                        onClick={() => {
+                          onOpenPrivateChat(member.userId)
+                          setShowMembers(false)
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm hover:bg-white/5"
+                      >
+                        <Avatar
+                          photoFileId={member.photoFileId}
+                          initials={member.initials}
+                          color={member.color}
+                          className="h-8 w-8 flex-shrink-0 text-xs"
+                        />
+                        <span className="text-white">{member.name}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </header>
 
         <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-5 py-4">
@@ -418,7 +478,8 @@ export default function ChatView({
                         photoFileId={sender.photoFileId}
                         initials={sender.initials}
                         color={sender.color}
-                        className="h-8 w-8 flex-shrink-0 text-xs"
+                        className="h-8 w-8 flex-shrink-0 cursor-pointer text-xs"
+                        onClick={() => onOpenPrivateChat(sender.userId)}
                       />
                     ) : (
                       <div className="h-8 w-8 flex-shrink-0" />
@@ -426,8 +487,9 @@ export default function ChatView({
                     <div className="flex max-w-[60%] flex-col items-start">
                       {isFirst && sender && (
                         <span
-                          className="mb-0.5 ml-1 text-xs font-semibold"
+                          className="mb-0.5 ml-1 cursor-pointer text-xs font-semibold hover:underline"
                           style={{ color: sender.color }}
+                          onClick={() => onOpenPrivateChat(sender.userId)}
                         >
                           {sender.name}
                         </span>
@@ -450,7 +512,7 @@ export default function ChatView({
                   <div className="group relative max-w-[60%]">
                     {reactionBtn}
                     {pickerMsgId === message.id && (
-                      <EmojiPicker message={message} onClose={() => setPickerMsgId(null)} />
+                      <EmojiPicker message={message} onClose={() => setPickerMsgId(null)} onReactionToggle={onReactionToggle} />
                     )}
                     {bubbleInner(message.outgoing)}
                   </div>
