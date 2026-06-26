@@ -14,7 +14,69 @@ interface ChatViewProps {
 
 const LOAD_MORE_THRESHOLD_PX = 80
 
-function MediaBubbleContent({ media, version }: { media: UiMediaRef; version: number }) {
+interface LightboxProps {
+  media: UiMediaRef
+  src: string
+  onClose: () => void
+}
+
+function Lightbox({ media, src, onClose }: LightboxProps) {
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+      onClick={onClose}
+    >
+      <button
+        className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-lg text-white hover:bg-white/20"
+        onClick={onClose}
+        aria-label="Fermer"
+      >
+        ✕
+      </button>
+
+      <div
+        className="flex max-h-screen max-w-[90vw] items-center justify-center p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {(media.kind === 'photo' || media.kind === 'sticker') && (
+          <img
+            src={src}
+            alt=""
+            className="max-h-[90vh] max-w-[88vw] rounded-lg object-contain shadow-2xl"
+          />
+        )}
+        {(media.kind === 'video' || media.kind === 'animation') && (
+          <video
+            src={src}
+            controls={media.kind === 'video'}
+            autoPlay
+            loop={media.kind === 'animation'}
+            muted={media.kind === 'animation'}
+            className="max-h-[90vh] max-w-[88vw] rounded-lg shadow-2xl"
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MediaBubbleContent({
+  media,
+  version,
+  onOpenLightbox,
+}: {
+  media: UiMediaRef
+  version: number
+  onOpenLightbox: (media: UiMediaRef, src: string) => void
+}) {
   const [failed, setFailed] = useState(false)
   const src = `minigram-media://media?id=${media.fileId}&v=${version}`
 
@@ -24,6 +86,8 @@ function MediaBubbleContent({ media, version }: { media: UiMediaRef; version: nu
     return <div className="text-xs italic text-white/60">Téléchargement du média en cours…</div>
   }
 
+  const canLightbox = media.kind === 'photo' || media.kind === 'video' || media.kind === 'animation' || media.kind === 'sticker'
+
   switch (media.kind) {
     case 'photo':
     case 'sticker':
@@ -32,21 +96,31 @@ function MediaBubbleContent({ media, version }: { media: UiMediaRef; version: nu
           src={src}
           alt=""
           onError={() => setFailed(true)}
-          className="max-h-72 max-w-full rounded-lg object-contain"
+          onClick={canLightbox ? () => onOpenLightbox(media, src) : undefined}
+          className={`max-h-72 max-w-full rounded-lg object-contain ${canLightbox ? 'cursor-zoom-in' : ''}`}
         />
       )
     case 'video':
     case 'animation':
       return (
-        <video
-          src={src}
-          onError={() => setFailed(true)}
-          controls={media.kind === 'video'}
-          autoPlay={media.kind === 'animation'}
-          loop={media.kind === 'animation'}
-          muted={media.kind === 'animation'}
-          className="max-h-72 max-w-full rounded-lg"
-        />
+        <div className={canLightbox ? 'relative cursor-zoom-in' : ''} onClick={canLightbox ? () => onOpenLightbox(media, src) : undefined}>
+          <video
+            src={src}
+            onError={() => setFailed(true)}
+            controls={false}
+            autoPlay={media.kind === 'animation'}
+            loop={media.kind === 'animation'}
+            muted
+            className="max-h-72 max-w-full rounded-lg"
+          />
+          {media.kind === 'video' && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/50 text-xl text-white">
+                ▶
+              </div>
+            </div>
+          )}
+        </div>
       )
     case 'voice':
       return <audio src={src} controls onError={() => setFailed(true)} className="max-w-full" />
@@ -76,6 +150,7 @@ export default function ChatView({
   mediaVersion,
 }: ChatViewProps) {
   const [draft, setDraft] = useState('')
+  const [lightbox, setLightbox] = useState<{ media: UiMediaRef; src: string } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevScrollHeightRef = useRef<number | null>(null)
@@ -90,10 +165,6 @@ export default function ChatView({
     }
   }
 
-  // Remonter dans l'historique (scroll-up) ne doit pas faire défiler vers le
-  // bas comme un nouveau message : on ajuste scrollTop du delta de hauteur
-  // ajoutée pour garder la position visuelle stable, plutôt que de
-  // re-scroller en bas à chaque chargement de messages plus anciens.
   useLayoutEffect(() => {
     const el = scrollRef.current
     const lastId = messages.at(-1)?.id ?? null
@@ -128,68 +199,82 @@ export default function ChatView({
   }
 
   return (
-    <div className="flex h-full flex-1 flex-col bg-tg-bg">
-      <header className="flex items-center gap-3 border-b border-tg-border px-5 py-3">
-        <div
-          className="flex h-10 w-10 items-center justify-center rounded-full text-base font-medium text-white"
-          style={{ backgroundColor: chat.color }}
-        >
-          {chat.initials}
-        </div>
-        <div>
-          <div className="font-medium text-white">{chat.name}</div>
-        </div>
-      </header>
-
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="flex flex-col gap-2">
-          {loadingMore && (
-            <div className="py-2 text-center text-xs text-tg-muted">Chargement de l'historique…</div>
-          )}
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.outgoing ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[60%] rounded-xl px-3 py-2 text-sm text-white shadow ${
-                  message.outgoing
-                    ? 'rounded-br-sm bg-tg-bubble-out'
-                    : 'rounded-bl-sm bg-tg-bubble-in'
-                }`}
-              >
-                {message.media && (
-                  <div className="mb-1">
-                    <MediaBubbleContent media={message.media} version={mediaVersion} />
-                  </div>
-                )}
-                {message.text && <div>{message.text}</div>}
-                <div className="mt-1 text-right text-[10px] text-white/50">{message.time}</div>
-              </div>
-            </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3 border-t border-tg-border px-5 py-3">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleSend()
-          }}
-          placeholder="Écrire un message"
-          className="flex-1 rounded-full bg-tg-sidebar px-4 py-2 text-sm text-white placeholder-tg-muted outline-none"
+    <>
+      {lightbox && (
+        <Lightbox
+          media={lightbox.media}
+          src={lightbox.src}
+          onClose={() => setLightbox(null)}
         />
-        <button
-          onClick={handleSend}
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-tg-accent text-white"
-          aria-label="Envoyer"
-        >
-          ➤
-        </button>
+      )}
+
+      <div className="flex h-full flex-1 flex-col bg-tg-bg">
+        <header className="flex items-center gap-3 border-b border-tg-border px-5 py-3">
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-full text-base font-medium text-white"
+            style={{ backgroundColor: chat.color }}
+          >
+            {chat.initials}
+          </div>
+          <div>
+            <div className="font-medium text-white">{chat.name}</div>
+          </div>
+        </header>
+
+        <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="flex flex-col gap-2">
+            {loadingMore && (
+              <div className="py-2 text-center text-xs text-tg-muted">Chargement de l'historique…</div>
+            )}
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.outgoing ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[60%] rounded-xl px-3 py-2 text-sm text-white shadow ${
+                    message.outgoing
+                      ? 'rounded-br-sm bg-tg-bubble-out'
+                      : 'rounded-bl-sm bg-tg-bubble-in'
+                  }`}
+                >
+                  {message.media && (
+                    <div className="mb-1">
+                      <MediaBubbleContent
+                        media={message.media}
+                        version={mediaVersion}
+                        onOpenLightbox={(m, s) => setLightbox({ media: m, src: s })}
+                      />
+                    </div>
+                  )}
+                  {message.text && <div>{message.text}</div>}
+                  <div className="mt-1 text-right text-[10px] text-white/50">{message.time}</div>
+                </div>
+              </div>
+            ))}
+            <div ref={bottomRef} />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 border-t border-tg-border px-5 py-3">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSend()
+            }}
+            placeholder="Écrire un message"
+            className="flex-1 rounded-full bg-tg-sidebar px-4 py-2 text-sm text-white placeholder-tg-muted outline-none"
+          />
+          <button
+            onClick={handleSend}
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-tg-accent text-white"
+            aria-label="Envoyer"
+          >
+            ➤
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
