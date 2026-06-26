@@ -53,6 +53,7 @@ import {
   type MappedUpdate,
   type PendingCandidate,
   type TdChat,
+  type TdFile,
   type TdMessage,
   type TdUpdate,
   type TdUser,
@@ -178,6 +179,19 @@ export function startClient(options: StartClientOptions): void {
 
     if (raw._ === 'updateAuthorizationState') {
       handleAuthorizationState(raw.authorization_state?._)
+      return
+    }
+
+    // TDLib notifie la complétion de chaque téléchargement via updateFile,
+    // indépendamment de processMediaQueue. On en profite pour notifier le
+    // renderer directement, sans attendre la fin de la queue entière — ça
+    // débloque l'affichage des médias haute priorité (vocaux, images visibles)
+    // même si la queue est en train de télécharger un gros fichier en arrière-plan.
+    if (raw._ === 'updateFile') {
+      const file = (raw as { file?: TdFile }).file
+      if (file?.local?.is_downloading_completed && file.local.path) {
+        onMediaReady(file.id)
+      }
       return
     }
 
@@ -424,12 +438,13 @@ async function downloadMediaFile(fileId: number): Promise<void> {
 async function processMediaQueue(): Promise<void> {
   mediaQueueRunning = true
   emitSyncProgress()
+  const retriedOnce = new Set<number>()
   while (mediaQueue.length > 0) {
     const fileId = mediaQueue.shift()!
     if (!client) break
 
     const entry = mediaSyncState.entries.find((e) => e.fileId === fileId)
-    if (!entry) continue
+    if (!entry || entry.status === 'done') continue
 
     try {
       const message = (await client.invoke({
@@ -447,6 +462,11 @@ async function processMediaQueue(): Promise<void> {
       onMediaReady(freshFileId)
     } catch (err) {
       console.error('[telegram] téléchargement média échoué pour le fichier', fileId, err)
+      // Retry une fois en fin de queue — couvre les erreurs réseau transitoires.
+      if (!retriedOnce.has(fileId)) {
+        retriedOnce.add(fileId)
+        mediaQueue.push(fileId)
+      }
     }
     emitSyncProgress()
   }
