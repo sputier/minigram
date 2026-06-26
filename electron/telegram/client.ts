@@ -426,7 +426,22 @@ function resumePendingMediaDownloads(): void {
 
 async function downloadMediaFile(fileId: number): Promise<void> {
   if (!client) return
-  await client.invoke({ _: 'downloadFile', file_id: fileId, priority: 1, offset: 0, limit: 0, synchronous: true })
+  const result = (await client.invoke({
+    _: 'downloadFile',
+    file_id: fileId,
+    priority: 32,
+    offset: 0,
+    limit: 0,
+    synchronous: true,
+  })) as unknown as TdFile
+  if (!result.local?.is_downloading_completed) {
+    // TDLib a résolu sans throw mais le fichier n'est pas téléchargé —
+    // ce cas survient notamment quand le fichier n'est plus disponible
+    // côté serveur ou que TDLib a rencontré une erreur interne.
+    throw new Error(
+      `TDLib: downloadFile(${fileId}) terminé mais is_downloading_completed=false (path=${result.local?.path ?? 'vide'})`,
+    )
+  }
 }
 
 // file_id n'est fiable que pour la durée de vie du process TDLib qui l'a
@@ -468,7 +483,9 @@ async function processMediaQueue(): Promise<void> {
         chat_id: entry.chatId,
         message_id: entry.messageId,
       })) as unknown as TdMessage
-      const freshFileId = extractMedia(message.content)?.fileId ?? fileId
+      const freshMedia = extractMedia(message.content)
+      const freshFileId = freshMedia?.fileId ?? fileId
+      console.log(`[media] téléchargement fileId=${fileId} freshId=${freshFileId} type=${message.content?._ ?? '?'} kind=${freshMedia?.kind ?? '?'}`)
 
       await downloadMediaFile(freshFileId)
 
