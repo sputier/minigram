@@ -444,13 +444,6 @@ async function downloadMediaFile(fileId: number): Promise<void> {
   }
 }
 
-// file_id n'est fiable que pour la durée de vie du process TDLib qui l'a
-// émis : un id persisté dans media-sync.json puis réutilisé après un
-// redémarrage de l'app (process TDLib différent) échoue avec "File not
-// found", même si le fichier existe bel et bien côté serveur. On ne le
-// traite donc que comme une clé de dédup ; avant chaque téléchargement, on
-// rafraîchit le message d'origine (chatId/messageId, stables) pour obtenir
-// l'identifiant de fichier valide dans la session en cours.
 async function processMediaQueue(): Promise<void> {
   mediaQueueRunning = true
   emitSyncProgress()
@@ -478,21 +471,20 @@ async function processMediaQueue(): Promise<void> {
     }
 
     try {
-      const message = (await client.invoke({
-        _: 'getMessage',
-        chat_id: entry.chatId,
-        message_id: entry.messageId,
-      })) as unknown as TdMessage
-      const freshMedia = extractMedia(message.content)
-      const freshFileId = freshMedia?.fileId ?? fileId
-      console.log(`[media] téléchargement fileId=${fileId} freshId=${freshFileId} type=${message.content?._ ?? '?'} kind=${freshMedia?.kind ?? '?'}`)
-
-      await downloadMediaFile(freshFileId)
+      // On télécharge directement fileId (ce que le renderer a en cache dans
+      // ses URLs). On n'appelle plus getMessage pour obtenir un "freshFileId"
+      // car cela introduisait un mismatch : pour une photo, getMessage peut
+      // retourner une taille différente (ex: XL) que getHistory (L), et TDLib
+      // assignerait un fileId différent → le renderer gardait l'ancien fileId
+      // non téléchargé → resolveFilePath=null indéfiniment.
+      // Les fileIds TDLib sont persistants entre sessions (prouvé par
+      // media-sync.json qui conserve les mêmes IDs sur plusieurs démarrages).
+      await downloadMediaFile(fileId)
 
       mediaSyncState = loadMediaSyncState(mediaSyncStatePath)
       mediaSyncState = markDone(mediaSyncState, fileId)
       saveMediaSyncState(mediaSyncStatePath, mediaSyncState)
-      onMediaReady(freshFileId)
+      onMediaReady(fileId)
     } catch (err) {
       console.error('[telegram] téléchargement média échoué pour le fichier', fileId, err)
       // Retry une fois en fin de queue — couvre les erreurs réseau transitoires.
