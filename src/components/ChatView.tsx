@@ -16,7 +16,7 @@ const LOAD_MORE_THRESHOLD_PX = 80
 
 function MediaBubbleContent({ media, version }: { media: UiMediaRef; version: number }) {
   const [failed, setFailed] = useState(false)
-  const src = `minigram-media://${media.fileId}/?v=${version}`
+  const src = `minigram-media://media?id=${media.fileId}&v=${version}`
 
   useEffect(() => setFailed(false), [version, media.fileId])
 

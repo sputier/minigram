@@ -1,7 +1,8 @@
 import 'dotenv/config'
-import { app, BrowserWindow, globalShortcut, ipcMain, net, protocol } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, protocol } from 'electron'
+import fs from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { checkAdminPassword } from './admin/authGate'
 import {
   addToWhitelist,
@@ -91,8 +92,13 @@ app.whenReady().then(() => {
   // td_files, au cas où TDLib renverrait un jour autre chose.
   const filesDirectory = path.resolve(path.join(app.getPath('userData'), 'td_files'))
 
+  // URL scheme : minigram-media://media?id=FILEID&v=VERSION
+  // On passe fileId en query param plutôt qu'en hostname : Chromium normalise
+  // les entiers utilisés comme hostname en IPv4 pointée (ex. 1301 → 0.0.5.21),
+  // ce qui rendait Number(url.hostname) = NaN.
   protocol.handle(MEDIA_PROTOCOL, async (request) => {
-    const fileId = Number(new URL(request.url).hostname)
+    const url = new URL(request.url)
+    const fileId = Number(url.searchParams.get('id'))
     if (!Number.isInteger(fileId) || fileId <= 0) {
       return new Response('Identifiant de fichier invalide', { status: 400 })
     }
@@ -107,7 +113,24 @@ app.whenReady().then(() => {
       return new Response('Accès refusé', { status: 403 })
     }
 
-    return net.fetch(pathToFileURL(resolved).toString())
+    try {
+      const data = await fs.readFile(resolved)
+      const ext = path.extname(resolved).toLowerCase()
+      const contentType =
+        ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+        : ext === '.png' ? 'image/png'
+        : ext === '.webp' ? 'image/webp'
+        : ext === '.gif' ? 'image/gif'
+        : ext === '.mp4' ? 'video/mp4'
+        : ext === '.ogg' || ext === '.oga' ? 'audio/ogg'
+        : ext === '.mp3' ? 'audio/mpeg'
+        : ext === '.m4a' ? 'audio/mp4'
+        : ext === '.tgs' ? 'application/x-tgsticker'
+        : 'application/octet-stream'
+      return new Response(data, { status: 200, headers: { 'Content-Type': contentType } })
+    } catch {
+      return new Response('Erreur de lecture', { status: 500 })
+    }
   })
 
   startClient({
