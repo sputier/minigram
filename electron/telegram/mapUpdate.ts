@@ -363,7 +363,9 @@ export function mapUpdate(update: TdUpdate, whitelist: Whitelist): MappedUpdate 
       }
       case 'updateMessageInteractionInfo': {
         const chatId = (update as { chat_id?: number }).chat_id
-        if (typeof chatId !== 'number' || !isChatAllowed(whitelist, chatId)) return null
+        if (typeof chatId !== 'number') return null
+        // isChatAllowed couvre les groupes/canaux ; les chats privés (chatId > 0 = userId) passent via isUserAllowed
+        if (!isChatAllowed(whitelist, chatId) && !(chatId > 0 && isUserAllowed(whitelist, chatId))) return null
         const messageId = (update as { message_id?: number }).message_id
         if (typeof messageId !== 'number') return null
         const info = (update as { interaction_info?: TdMessageInteractionInfo }).interaction_info

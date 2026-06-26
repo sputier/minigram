@@ -37,6 +37,7 @@ interface ChatViewProps {
   chat: UiChat | undefined
   messages: UiMessage[]
   onSend: (text: string) => void
+  onReactionToggle: ReactionToggle
   emptyMessage: string
   onLoadMore: () => void
   hasMore: boolean
@@ -114,7 +115,9 @@ function UserAvatarMini({ avatar }: { avatar: UiUserAvatar }) {
 
 const QUICK_REACTIONS = ['👍', '👎', '❤️', '🔥', '😂', '🥰', '😱', '💯', '👏', '🎉']
 
-function EmojiPicker({ message, onClose }: { message: UiMessage; onClose: () => void }) {
+type ReactionToggle = (chatId: number, messageId: number, emoji: string, remove: boolean) => void
+
+function EmojiPicker({ message, onClose, onReactionToggle }: { message: UiMessage; onClose: () => void; onReactionToggle: ReactionToggle }) {
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -137,8 +140,7 @@ function EmojiPicker({ message, onClose }: { message: UiMessage; onClose: () => 
             key={emoji}
             title={chosen ? 'Retirer la réaction' : 'Réagir'}
             onClick={() => {
-              if (chosen) window.minigram.removeReaction(message.chatId, message.id, emoji)
-              else window.minigram.addReaction(message.chatId, message.id, emoji)
+              onReactionToggle(message.chatId, message.id, emoji, chosen)
               onClose()
             }}
             className={`rounded-full px-0.5 text-xl leading-none transition-transform hover:scale-125 ${
@@ -153,7 +155,7 @@ function EmojiPicker({ message, onClose }: { message: UiMessage; onClose: () => 
   )
 }
 
-function ReactionPill({ reaction, chatId, messageId }: { reaction: UiReaction; chatId: number; messageId: number }) {
+function ReactionPill({ reaction, chatId, messageId, onReactionToggle }: { reaction: UiReaction; chatId: number; messageId: number; onReactionToggle: ReactionToggle }) {
   const [avatars, setAvatars] = useState<UiUserAvatar[]>([])
 
   useEffect(() => {
@@ -166,8 +168,7 @@ function ReactionPill({ reaction, chatId, messageId }: { reaction: UiReaction; c
   }, [reaction.recentSenderIds.join(',')])
 
   function handleClick() {
-    if (reaction.chosen) window.minigram.removeReaction(chatId, messageId, reaction.emoji)
-    else window.minigram.addReaction(chatId, messageId, reaction.emoji)
+    onReactionToggle(chatId, messageId, reaction.emoji, reaction.chosen)
   }
 
   return (
@@ -274,6 +275,7 @@ export default function ChatView({
   chat,
   messages,
   onSend,
+  onReactionToggle,
   emptyMessage,
   onLoadMore,
   hasMore,
@@ -390,7 +392,7 @@ export default function ChatView({
                 message.reactions && message.reactions.length > 0 ? (
                   <div className={`relative -mt-1 mb-1 flex flex-wrap gap-1 ${justify}`}>
                     {message.reactions.map((r) => (
-                      <ReactionPill key={r.emoji} reaction={r} chatId={message.chatId} messageId={message.id} />
+                      <ReactionPill key={r.emoji} reaction={r} chatId={message.chatId} messageId={message.id} onReactionToggle={onReactionToggle} />
                     ))}
                   </div>
                 ) : null
@@ -433,7 +435,7 @@ export default function ChatView({
                       <div className="group relative">
                         {reactionBtn}
                         {pickerMsgId === message.id && (
-                          <EmojiPicker message={message} onClose={() => setPickerMsgId(null)} />
+                          <EmojiPicker message={message} onClose={() => setPickerMsgId(null)} onReactionToggle={onReactionToggle} />
                         )}
                         {bubbleInner(false)}
                       </div>

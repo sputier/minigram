@@ -3,7 +3,7 @@ import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
 import AdminGate from './components/AdminGate'
 import SyncProgressBar from './components/SyncProgressBar'
-import type { SyncProgress, UiChat, UiMessage, UiSelf } from './types/telegram'
+import type { SyncProgress, UiChat, UiMessage, UiReaction, UiSelf } from './types/telegram'
 
 export default function App() {
   const [self, setSelf] = useState<UiSelf | null>(null)
@@ -112,6 +112,33 @@ export default function App() {
     void window.minigram.sendMessage(activeChatId, text)
   }
 
+  function handleReactionToggle(chatId: number, messageId: number, emoji: string, remove: boolean) {
+    setMessagesByChat((prev) => {
+      const msgs = prev[chatId] ?? []
+      return {
+        ...prev,
+        [chatId]: msgs.map((m) => {
+          if (m.id !== messageId) return m
+          const existing = m.reactions ?? []
+          let updated: UiReaction[]
+          if (remove) {
+            updated = existing
+              .map((r) => r.emoji === emoji ? { ...r, count: r.count - 1, chosen: false } : r)
+              .filter((r) => r.count > 0)
+          } else {
+            const found = existing.find((r) => r.emoji === emoji)
+            updated = found
+              ? existing.map((r) => r.emoji === emoji ? { ...r, count: r.count + 1, chosen: true } : r)
+              : [...existing, { emoji, count: 1, chosen: true, recentSenderIds: [] }]
+          }
+          return { ...m, reactions: updated.length > 0 ? updated : undefined }
+        }),
+      }
+    })
+    if (remove) void window.minigram.removeReaction(chatId, messageId, emoji)
+    else void window.minigram.addReaction(chatId, messageId, emoji)
+  }
+
   async function handleLoadMore() {
     if (activeChatId === undefined || loadingMore) return
     const oldest = messagesByChat[activeChatId]?.[0]?.id
@@ -138,6 +165,7 @@ export default function App() {
         chat={activeChat}
         messages={activeChatId !== undefined ? messagesByChat[activeChatId] ?? [] : []}
         onSend={handleSend}
+        onReactionToggle={handleReactionToggle}
         emptyMessage={emptyMessage}
         onLoadMore={handleLoadMore}
         hasMore={activeChatId !== undefined ? !noMoreHistory[activeChatId] : false}
