@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AuthState, SearchResult } from './telegram/client'
+import type { AuthState, SearchResult, SyncProgress } from './telegram/client'
 import type { MappedUpdate, UiChat, UiMessage, UiSelf } from './telegram/mapUpdate'
 import type { PendingEntry } from './telegram/pendingRequests'
 
@@ -21,6 +21,7 @@ export interface MinigramApi {
   onUpdate: (cb: (update: MappedUpdate) => void) => Unsubscribe
   onChatsChanged: (cb: (chats: UiChat[]) => void) => Unsubscribe
   onMediaReady: (cb: (fileId: number) => void) => Unsubscribe
+  onSyncProgress: (cb: (progress: SyncProgress) => void) => Unsubscribe
   getPendingRequests: () => Promise<PendingEntry[]>
   approvePending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>
   rejectPending: (kind: 'user' | 'chat', id: number) => Promise<PendingEntry[]>
@@ -63,6 +64,11 @@ const api: MinigramApi = {
     const listener = (_event: Electron.IpcRendererEvent, fileId: number) => cb(fileId)
     ipcRenderer.on('tg:media-ready', listener)
     return () => ipcRenderer.off('tg:media-ready', listener)
+  },
+  onSyncProgress: (cb) => {
+    const listener = (_event: Electron.IpcRendererEvent, progress: SyncProgress) => cb(progress)
+    ipcRenderer.on('tg:sync-progress', listener)
+    return () => ipcRenderer.off('tg:sync-progress', listener)
   },
   getPendingRequests: () => ipcRenderer.invoke('admin:get-pending'),
   approvePending: (kind, id) => ipcRenderer.invoke('admin:approve-pending', kind, id),

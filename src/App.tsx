@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
 import AdminGate from './components/AdminGate'
-import type { UiChat, UiMessage, UiSelf } from './types/telegram'
+import SyncProgressBar from './components/SyncProgressBar'
+import type { SyncProgress, UiChat, UiMessage, UiSelf } from './types/telegram'
 
 export default function App() {
   const [self, setSelf] = useState<UiSelf | null>(null)
@@ -12,6 +13,7 @@ export default function App() {
   const [noMoreHistory, setNoMoreHistory] = useState<Record<number, boolean>>({})
   const [loadingMore, setLoadingMore] = useState(false)
   const [mediaVersion, setMediaVersion] = useState(0)
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({ active: false, mediaPending: 0, mediaDone: 0 })
 
   useEffect(() => {
     function loadAccount() {
@@ -58,6 +60,10 @@ export default function App() {
 
   useEffect(() => {
     return window.minigram.onMediaReady(() => setMediaVersion((v) => v + 1))
+  }, [])
+
+  useEffect(() => {
+    return window.minigram.onSyncProgress(setSyncProgress)
   }, [])
 
   useEffect(() => {
@@ -113,7 +119,8 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-tg-bg text-white">
+    <div className="relative flex h-screen w-screen overflow-hidden bg-tg-bg text-white">
+      <SyncProgressBar {...syncProgress} />
       <Sidebar self={self} chats={chats} activeChatId={activeChatId} onSelectChat={setActiveChatId} />
       <ChatView
         chat={activeChat}

@@ -22,6 +22,7 @@ import {
   submitAuthPassword,
   submitPhoneNumber,
   type AuthState,
+  type SyncProgress,
 } from './telegram/client'
 import type { MappedUpdate, UiChat } from './telegram/mapUpdate'
 
@@ -74,6 +75,10 @@ function broadcastChats(chats: UiChat[]) {
 
 function broadcastMediaReady(fileId: number) {
   win?.webContents.send('tg:media-ready', fileId)
+}
+
+function broadcastSyncProgress(progress: SyncProgress) {
+  win?.webContents.send('tg:sync-progress', progress)
 }
 
 app.whenReady().then(() => {
@@ -140,6 +145,7 @@ app.whenReady().then(() => {
     onAuthState: broadcastAuthState,
     onUpdate: broadcastUpdate,
     onMediaReady: broadcastMediaReady,
+    onSyncProgress: broadcastSyncProgress,
   })
 })
 

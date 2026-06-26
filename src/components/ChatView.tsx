@@ -68,6 +68,8 @@ function Lightbox({ media, src, onClose }: LightboxProps) {
   )
 }
 
+type MediaFailReason = 'pending' | 'unsupported'
+
 function MediaBubbleContent({
   media,
   version,
@@ -77,13 +79,16 @@ function MediaBubbleContent({
   version: number
   onOpenLightbox: (media: UiMediaRef, src: string) => void
 }) {
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState<MediaFailReason | null>(null)
   const src = `minigram-media://media?id=${media.fileId}&v=${version}`
 
-  useEffect(() => setFailed(false), [version, media.fileId])
+  useEffect(() => setFailed(null), [version, media.fileId])
 
   if (failed) {
-    return <div className="text-xs italic text-white/60">Téléchargement du média en cours…</div>
+    const msg = failed === 'unsupported'
+      ? 'Format vidéo non supporté par le lecteur intégré.'
+      : 'Téléchargement du média en cours…'
+    return <div className="text-xs italic text-white/60">{msg}</div>
   }
 
   const canLightbox = media.kind === 'photo' || media.kind === 'video' || media.kind === 'animation' || media.kind === 'sticker'
@@ -95,7 +100,7 @@ function MediaBubbleContent({
         <img
           src={src}
           alt=""
-          onError={() => setFailed(true)}
+          onError={() => setFailed('pending')}
           onClick={canLightbox ? () => onOpenLightbox(media, src) : undefined}
           className={`max-h-72 max-w-full rounded-lg object-contain ${canLightbox ? 'cursor-zoom-in' : ''}`}
         />
@@ -106,7 +111,11 @@ function MediaBubbleContent({
         <div className={canLightbox ? 'relative cursor-zoom-in' : ''} onClick={canLightbox ? () => onOpenLightbox(media, src) : undefined}>
           <video
             src={src}
-            onError={() => setFailed(true)}
+            onError={(e) => {
+              const code = (e.target as HTMLVideoElement).error?.code
+              // MEDIA_ERR_DECODE = 3, MEDIA_ERR_SRC_NOT_SUPPORTED = 4
+              setFailed(code === 3 || code === 4 ? 'unsupported' : 'pending')
+            }}
             controls={false}
             autoPlay={media.kind === 'animation'}
             loop={media.kind === 'animation'}
@@ -123,7 +132,7 @@ function MediaBubbleContent({
         </div>
       )
     case 'voice':
-      return <audio src={src} controls onError={() => setFailed(true)} className="max-w-full" />
+      return <audio src={src} controls onError={() => setFailed('pending')} className="max-w-full" />
     case 'document':
       return (
         <a

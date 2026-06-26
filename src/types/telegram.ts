@@ -60,3 +60,9 @@ export interface SearchResult {
   id: number
   name: string
 }
+
+export interface SyncProgress {
+  active: boolean
+  mediaPending: number
+  mediaDone: number
+}

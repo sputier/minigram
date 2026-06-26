@@ -3,6 +3,15 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      keyframes: {
+        syncSlide: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(400%)' },
+        },
+      },
+      animation: {
+        'sync-slide': 'syncSlide 1.5s ease-in-out infinite',
+      },
       colors: {
         tg: {
           bg: '#17212b',
