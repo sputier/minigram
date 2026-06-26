@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { existsSync } from 'node:fs'
 import { app } from 'electron'
 import * as tdl from 'tdl'
 import type { LoginUser } from 'tdl'
@@ -444,7 +445,22 @@ async function processMediaQueue(): Promise<void> {
     if (!client) break
 
     const entry = mediaSyncState.entries.find((e) => e.fileId === fileId)
-    if (!entry || entry.status === 'done') continue
+    if (!entry) continue
+    if (entry.status === 'done') {
+      // Vérifie que le fichier existe vraiment sur disque. Si media-sync.json
+      // a été marqué done dans une session précédente où le téléchargement a
+      // échoué silencieusement, le fichier est absent et l'audio resterait
+      // bloqué sur "Téléchargement en cours" sans jamais être retéléchargé.
+      const existingPath = await resolveFilePath(fileId)
+      if (existingPath && existsSync(existingPath)) continue
+      console.warn(`[media] fileId=${fileId} marqué done mais fichier absent (path=${existingPath ?? 'null'}) — reset et re-téléchargement`)
+      mediaSyncState = loadMediaSyncState(mediaSyncStatePath)
+      mediaSyncState = {
+        ...mediaSyncState,
+        entries: mediaSyncState.entries.map((e) => (e.fileId === fileId ? { ...e, status: 'pending' } : e)),
+      }
+      saveMediaSyncState(mediaSyncStatePath, mediaSyncState)
+    }
 
     try {
       const message = (await client.invoke({

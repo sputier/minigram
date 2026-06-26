@@ -133,6 +133,7 @@ app.whenReady().then(() => {
 
     const localPath = await resolveFilePath(fileId)
     if (!localPath) {
+      console.warn(`[media-protocol] fileId=${fileId} → resolveFilePath=null (fichier non téléchargé)`)
       return new Response('Fichier non disponible', { status: 404 })
     }
 
@@ -146,6 +147,7 @@ app.whenReady().then(() => {
     try {
       const data = await fs.readFile(resolved)
       const ext = path.extname(resolved).toLowerCase()
+      console.log(`[media-protocol] fileId=${fileId} path=${resolved} ext="${ext}" size=${data.length}`)
       const extType =
         ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
         : ext === '.png' ? 'image/png'
@@ -191,7 +193,8 @@ app.whenReady().then(() => {
           'Content-Length': String(data.length),
         },
       })
-    } catch {
+    } catch (err) {
+      console.error(`[media-protocol] fileId=${fileId} path=${resolved} lecture échouée:`, err)
       return new Response('Erreur de lecture', { status: 500 })
     }
   })
