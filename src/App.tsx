@@ -141,7 +141,11 @@ export default function App() {
 
   async function handleOpenPrivateChat(userId: number) {
     const chat = await window.minigram.openPrivateChat(userId)
-    if (chat) setActiveChatId(chat.id)
+    if (!chat) return
+    // Un chat sans messages n'apparaît pas dans getChats() — on l'injecte
+    // directement pour qu'il soit visible même avant le premier message.
+    setChats((prev) => (prev.some((c) => c.id === chat.id) ? prev : [chat, ...prev]))
+    setActiveChatId(chat.id)
   }
 
   async function handleLoadMore() {

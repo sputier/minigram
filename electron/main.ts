@@ -215,11 +215,7 @@ ipcMain.handle('tg:remove-reaction', (_event, chatId: number, messageId: number,
 
 ipcMain.handle('tg:get-group-members', (_event, chatId: number) => getGroupMembers(chatId))
 
-ipcMain.handle('tg:open-private-chat', async (_event, userId: number) => {
-  const chat = await openPrivateChat(userId)
-  broadcastChats(await getChats())
-  return chat
-})
+ipcMain.handle('tg:open-private-chat', (_event, userId: number) => openPrivateChat(userId))
 
 ipcMain.handle('admin:search-contacts', (_event, query: string) => searchContacts(query))
 
