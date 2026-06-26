@@ -28,6 +28,8 @@ export interface MinigramApi {
   searchContacts: (query: string) => Promise<SearchResult[]>
   addToWhitelist: (kind: 'user' | 'chat', id: number) => Promise<void>
   getUserAvatars: (userIds: number[]) => Promise<UiUserAvatar[]>
+  addReaction: (chatId: number, messageId: number, emoji: string) => Promise<void>
+  removeReaction: (chatId: number, messageId: number, emoji: string) => Promise<void>
 }
 
 const api: MinigramApi = {
@@ -77,6 +79,8 @@ const api: MinigramApi = {
   searchContacts: (query) => ipcRenderer.invoke('admin:search-contacts', query),
   addToWhitelist: (kind, id) => ipcRenderer.invoke('admin:add-to-whitelist', kind, id),
   getUserAvatars: (userIds) => ipcRenderer.invoke('tg:get-user-avatars', userIds),
+  addReaction: (chatId, messageId, emoji) => ipcRenderer.invoke('tg:add-reaction', chatId, messageId, emoji),
+  removeReaction: (chatId, messageId, emoji) => ipcRenderer.invoke('tg:remove-reaction', chatId, messageId, emoji),
 }
 
 contextBridge.exposeInMainWorld('minigram', api)

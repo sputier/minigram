@@ -607,6 +607,28 @@ export async function sendMessage(chatId: number, text: string): Promise<void> {
   })
 }
 
+export async function addReaction(chatId: number, messageId: number, emoji: string): Promise<void> {
+  if (!client) return
+  await client.invoke({
+    _: 'addMessageReaction',
+    chat_id: chatId,
+    message_id: messageId,
+    reaction_type: { _: 'reactionTypeEmoji', emoji },
+    is_big: false,
+    update_recent_reactions: false,
+  })
+}
+
+export async function removeReaction(chatId: number, messageId: number, emoji: string): Promise<void> {
+  if (!client) return
+  await client.invoke({
+    _: 'removeMessageReaction',
+    chat_id: chatId,
+    message_id: messageId,
+    reaction_type: { _: 'reactionTypeEmoji', emoji },
+  })
+}
+
 export function getPendingRequests(): PendingEntry[] {
   pendingStore = loadPendingStore(pendingStorePath)
   return pendingStore.pending

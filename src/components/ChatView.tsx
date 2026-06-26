@@ -112,7 +112,48 @@ function UserAvatarMini({ avatar }: { avatar: UiUserAvatar }) {
   )
 }
 
-function ReactionPill({ reaction }: { reaction: UiReaction }) {
+const QUICK_REACTIONS = ['👍', '👎', '❤️', '🔥', '😂', '🥰', '😱', '💯', '👏', '🎉']
+
+function EmojiPicker({ message, onClose }: { message: UiMessage; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      className="absolute bottom-full left-0 z-20 mb-1 flex rounded-full bg-[#1e2c3a] px-2 py-1.5 shadow-xl ring-1 ring-white/10"
+    >
+      {QUICK_REACTIONS.map((emoji) => {
+        const chosen = message.reactions?.find((r) => r.emoji === emoji)?.chosen ?? false
+        return (
+          <button
+            key={emoji}
+            title={chosen ? 'Retirer la réaction' : 'Réagir'}
+            onClick={() => {
+              if (chosen) window.minigram.removeReaction(message.chatId, message.id, emoji)
+              else window.minigram.addReaction(message.chatId, message.id, emoji)
+              onClose()
+            }}
+            className={`rounded-full px-0.5 text-xl leading-none transition-transform hover:scale-125 ${
+              chosen ? 'ring-2 ring-tg-accent/70' : ''
+            }`}
+          >
+            {emoji}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function ReactionPill({ reaction, chatId, messageId }: { reaction: UiReaction; chatId: number; messageId: number }) {
   const [avatars, setAvatars] = useState<UiUserAvatar[]>([])
 
   useEffect(() => {
@@ -124,9 +165,15 @@ function ReactionPill({ reaction }: { reaction: UiReaction }) {
     return () => { cancelled = true }
   }, [reaction.recentSenderIds.join(',')])
 
+  function handleClick() {
+    if (reaction.chosen) window.minigram.removeReaction(chatId, messageId, reaction.emoji)
+    else window.minigram.addReaction(chatId, messageId, reaction.emoji)
+  }
+
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+    <button
+      onClick={handleClick}
+      className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-opacity hover:opacity-80 active:scale-95 ${
         reaction.chosen
           ? 'bg-tg-accent/30 text-tg-accent ring-1 ring-tg-accent/50'
           : 'bg-white/10 text-white/80'
@@ -139,7 +186,7 @@ function ReactionPill({ reaction }: { reaction: UiReaction }) {
         </span>
       )}
       {reaction.count > 1 && <span className="font-medium">{reaction.count}</span>}
-    </span>
+    </button>
   )
 }
 
@@ -236,6 +283,7 @@ export default function ChatView({
 }: ChatViewProps) {
   const [draft, setDraft] = useState('')
   const [lightbox, setLightbox] = useState<{ media: UiMediaRef; src: string } | null>(null)
+  const [pickerMsgId, setPickerMsgId] = useState<number | null>(null)
   const senderAvatars = useSenderAvatars(messages, chat?.isGroup ?? false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -338,6 +386,28 @@ export default function ChatView({
                 </div>
               )
 
+              const reactionPills = (justify: 'justify-start' | 'justify-end') =>
+                message.reactions && message.reactions.length > 0 ? (
+                  <div className={`-mt-1 mb-1 flex flex-wrap gap-1 ${justify}`}>
+                    {message.reactions.map((r) => (
+                      <ReactionPill key={r.emoji} reaction={r} chatId={message.chatId} messageId={message.id} />
+                    ))}
+                  </div>
+                ) : null
+
+              const reactionBtn = (
+                <button
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => setPickerMsgId((id) => (id === message.id ? null : message.id))}
+                  className={`absolute top-1 hidden h-6 w-6 items-center justify-center rounded-full bg-[#1e2c3a] text-sm text-white/50 shadow ring-1 ring-white/10 hover:text-white group-hover:flex ${
+                    message.outgoing ? '-left-7' : '-right-7'
+                  }`}
+                  title="Ajouter une réaction"
+                >
+                  😊
+                </button>
+              )
+
               if (!message.outgoing && isGroupChat && message.senderId) {
                 return (
                   <div key={message.id} className="flex flex-row items-start gap-2">
@@ -360,14 +430,14 @@ export default function ChatView({
                           {sender.name}
                         </span>
                       )}
-                      {bubbleInner(false)}
-                      {message.reactions && message.reactions.length > 0 && (
-                        <div className="-mt-1 mb-1 flex flex-wrap gap-1 justify-start">
-                          {message.reactions.map((r) => (
-                            <ReactionPill key={r.emoji} reaction={r} />
-                          ))}
-                        </div>
-                      )}
+                      <div className="group relative">
+                        {reactionBtn}
+                        {pickerMsgId === message.id && (
+                          <EmojiPicker message={message} onClose={() => setPickerMsgId(null)} />
+                        )}
+                        {bubbleInner(false)}
+                      </div>
+                      {reactionPills('justify-start')}
                     </div>
                   </div>
                 )
@@ -375,14 +445,14 @@ export default function ChatView({
 
               return (
                 <div key={message.id} className={`flex flex-col ${message.outgoing ? 'items-end' : 'items-start'}`}>
-                  <div className="max-w-[60%]">{bubbleInner(message.outgoing)}</div>
-                  {message.reactions && message.reactions.length > 0 && (
-                    <div className={`-mt-1 mb-1 flex flex-wrap gap-1 ${message.outgoing ? 'justify-end' : 'justify-start'}`}>
-                      {message.reactions.map((r) => (
-                        <ReactionPill key={r.emoji} reaction={r} />
-                      ))}
-                    </div>
-                  )}
+                  <div className="group relative max-w-[60%]">
+                    {reactionBtn}
+                    {pickerMsgId === message.id && (
+                      <EmojiPicker message={message} onClose={() => setPickerMsgId(null)} />
+                    )}
+                    {bubbleInner(message.outgoing)}
+                  </div>
+                  {reactionPills(message.outgoing ? 'justify-end' : 'justify-start')}
                 </div>
               )
             })}

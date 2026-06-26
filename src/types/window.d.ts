@@ -27,6 +27,8 @@ declare global {
       searchContacts: (query: string) => Promise<SearchResult[]>
       addToWhitelist: (kind: 'user' | 'chat', id: number) => Promise<void>
       getUserAvatars: (userIds: number[]) => Promise<UiUserAvatar[]>
+      addReaction: (chatId: number, messageId: number, emoji: string) => Promise<void>
+      removeReaction: (chatId: number, messageId: number, emoji: string) => Promise<void>
     }
   }
 }

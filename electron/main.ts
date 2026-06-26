@@ -5,6 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkAdminPassword } from './admin/authGate'
 import {
+  addReaction,
   addToWhitelist,
   approvePending,
   getChats,
@@ -14,6 +15,7 @@ import {
   getPendingRequests,
   getUserAvatars,
   rejectPending,
+  removeReaction,
   resolveFilePath,
   searchContacts,
   sendMessage,
@@ -200,6 +202,14 @@ ipcMain.handle('admin:reject-pending', (_event, kind: 'user' | 'chat', id: numbe
 })
 
 ipcMain.handle('tg:get-user-avatars', (_event, userIds: number[]) => getUserAvatars(userIds))
+
+ipcMain.handle('tg:add-reaction', (_event, chatId: number, messageId: number, emoji: string) =>
+  addReaction(chatId, messageId, emoji),
+)
+
+ipcMain.handle('tg:remove-reaction', (_event, chatId: number, messageId: number, emoji: string) =>
+  removeReaction(chatId, messageId, emoji),
+)
 
 ipcMain.handle('admin:search-contacts', (_event, query: string) => searchContacts(query))
 
