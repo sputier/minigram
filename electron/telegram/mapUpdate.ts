@@ -50,6 +50,7 @@ export interface TdMessage {
   date?: number
   content?: TdMessageContent
   interaction_info?: TdMessageInteractionInfo
+  reply_to?: { _: string; message_id?: number; chat_id?: number }
 }
 
 export interface TdChatType {
@@ -103,6 +104,7 @@ export interface UiMessage {
   senderId?: number
   media?: UiMediaRef
   reactions?: UiReaction[]
+  replyToMessageId?: number
 }
 
 export interface UiChat {
@@ -279,6 +281,10 @@ export function mapMessage(message: TdMessage): UiMessage {
     message.sender_id?._ === 'messageSenderUser' && !message.is_outgoing
       ? message.sender_id.user_id
       : undefined
+  const replyToMessageId =
+    message.reply_to?._ === 'messageReplyToMessage' && typeof message.reply_to.message_id === 'number'
+      ? message.reply_to.message_id
+      : undefined
   return {
     id: message.id,
     chatId: message.chat_id,
@@ -288,6 +294,7 @@ export function mapMessage(message: TdMessage): UiMessage {
     ...(senderId ? { senderId } : {}),
     ...(media ? { media } : {}),
     ...(reactions ? { reactions } : {}),
+    ...(replyToMessageId ? { replyToMessageId } : {}),
   }
 }
 

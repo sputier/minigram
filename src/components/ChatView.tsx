@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Avatar from './Avatar'
 import type { UiChat, UiMediaRef, UiMessage, UiReaction, UiUserAvatar } from '../types/telegram'
 
@@ -461,25 +461,66 @@ export default function ChatView({
                 message.id > snapshotReadIdRef.current &&
                 (index === 0 || messages[index - 1]!.id <= snapshotReadIdRef.current)
 
-              const bubbleInner = (outgoing: boolean) => (
-                <div
-                  className={`rounded-xl px-3 py-2 text-sm text-white shadow ${
-                    outgoing ? 'rounded-br-sm bg-tg-bubble-out' : 'rounded-bl-sm bg-tg-bubble-in'
-                  }`}
-                >
-                  {message.media && (
-                    <div className="mb-1">
-                      <MediaBubbleContent
-                        media={message.media}
-                        version={mediaVersion}
-                        onOpenLightbox={(m, s) => setLightbox({ media: m, src: s })}
-                      />
+              const bubbleInner = (outgoing: boolean) => {
+                let replyBlock: React.ReactNode = null
+                if (message.replyToMessageId) {
+                  const replied = messages.find((m) => m.id === message.replyToMessageId)
+                  let authorName = ''
+                  let authorColor = '#65aadd'
+                  let replyText = 'Message non disponible'
+                  if (replied) {
+                    if (replied.outgoing) {
+                      authorName = 'Vous'
+                      authorColor = '#6ab3f3'
+                    } else if (replied.senderId) {
+                      const av = senderAvatars.get(replied.senderId)
+                      authorName = av?.name ?? chat.name
+                      authorColor = av?.color ?? chat.color
+                    } else {
+                      authorName = chat.name
+                      authorColor = chat.color
+                    }
+                    replyText =
+                      replied.text ||
+                      (replied.media
+                        ? { photo: '📷 Photo', video: '🎥 Vidéo', voice: '🎤 Vocal', document: '📄 Document', sticker: 'Sticker', animation: 'GIF' }[replied.media.kind] ?? '📎 Média'
+                        : '…')
+                  }
+                  replyBlock = (
+                    <div
+                      className="mb-2 rounded bg-black/15 px-2 py-1.5"
+                      style={{ borderLeft: `3px solid ${authorColor}` }}
+                    >
+                      {authorName && (
+                        <div className="text-xs font-semibold leading-tight" style={{ color: authorColor }}>
+                          {authorName}
+                        </div>
+                      )}
+                      <div className="mt-0.5 line-clamp-1 text-xs text-white/70">{replyText}</div>
                     </div>
-                  )}
-                  {message.text && <div>{message.text}</div>}
-                  <div className="mt-1 text-right text-[10px] text-white/50">{message.time}</div>
-                </div>
-              )
+                  )
+                }
+                return (
+                  <div
+                    className={`rounded-xl px-3 py-2 text-sm text-white shadow ${
+                      outgoing ? 'rounded-br-sm bg-tg-bubble-out' : 'rounded-bl-sm bg-tg-bubble-in'
+                    }`}
+                  >
+                    {replyBlock}
+                    {message.media && (
+                      <div className="mb-1">
+                        <MediaBubbleContent
+                          media={message.media}
+                          version={mediaVersion}
+                          onOpenLightbox={(m, s) => setLightbox({ media: m, src: s })}
+                        />
+                      </div>
+                    )}
+                    {message.text && <div>{message.text}</div>}
+                    <div className="mt-1 text-right text-[10px] text-white/50">{message.time}</div>
+                  </div>
+                )
+              }
 
               const reactionPills = (justify: 'justify-start' | 'justify-end') =>
                 message.reactions && message.reactions.length > 0 ? (

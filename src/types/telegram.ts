@@ -31,6 +31,7 @@ export interface UiMessage {
   senderId?: number
   media?: UiMediaRef
   reactions?: UiReaction[]
+  replyToMessageId?: number
 }
 
 export interface UiChat {
