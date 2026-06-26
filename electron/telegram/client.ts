@@ -104,6 +104,8 @@ let onMappedUpdate: (update: MappedUpdate) => void = () => {}
 let onMediaReady: (fileId: number) => void = () => {}
 let onSyncProgressChange: (progress: SyncProgress) => void = () => {}
 
+const chatNameCache = new Map<number, string>()
+
 export interface SyncProgress {
   active: boolean
   mediaPending: number
@@ -176,6 +178,22 @@ export function startClient(options: StartClientOptions): void {
 
     if (raw._ === 'updateAuthorizationState') {
       handleAuthorizationState(raw.authorization_state?._)
+      return
+    }
+
+    // updateChatReadInbox nécessite allowedChatIdsCache (qui couvre les
+    // chats privés via user_id) — traité ici pour éviter de l'exposer dans
+    // mapUpdate, qui ne doit pas connaître ce cache.
+    if (raw._ === 'updateChatReadInbox') {
+      const chatId = (raw as any).chat_id
+      if (typeof chatId === 'number' && allowedChatIdsCache.has(chatId)) {
+        onMappedUpdate({
+          kind: 'chat-read-inbox',
+          chatId,
+          lastReadInboxMessageId: (raw as any).last_read_inbox_message_id ?? 0,
+          unreadCount: (raw as any).unread_count ?? 0,
+        })
+      }
       return
     }
 
@@ -548,6 +566,7 @@ export async function getChats(): Promise<UiChat[]> {
 
   tdChats.sort((a, b) => (b.last_message?.date ?? 0) - (a.last_message?.date ?? 0))
   allowedChatIdsCache = new Set(tdChats.map((c) => c.id))
+  for (const c of tdChats) chatNameCache.set(c.id, c.title)
 
   // Fire-and-forget : ne pas bloquer le retour de getChats() sur les photos.
   // onMediaReady notifie le renderer à chaque téléchargement terminé pour
@@ -801,4 +820,26 @@ export async function searchContacts(query: string): Promise<SearchResult[]> {
     results.push({ kind: 'chat', id: chatId, name: chat.title })
   }
   return results
+}
+
+export function getChatName(chatId: number): string {
+  return chatNameCache.get(chatId) ?? ''
+}
+
+export async function openChat(chatId: number): Promise<void> {
+  if (!client) return
+  try {
+    await client.invoke({ _: 'openChat', chat_id: chatId })
+  } catch (err) {
+    console.error('[telegram] openChat échoué pour', chatId, err)
+  }
+}
+
+export async function closeChat(chatId: number): Promise<void> {
+  if (!client) return
+  try {
+    await client.invoke({ _: 'closeChat', chat_id: chatId })
+  } catch (err) {
+    console.error('[telegram] closeChat échoué pour', chatId, err)
+  }
 }

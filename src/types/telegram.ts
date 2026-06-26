@@ -43,6 +43,7 @@ export interface UiChat {
   lastMessage: string
   time: string
   unread?: number
+  lastReadInboxMessageId?: number
 }
 
 export interface UiSelf {
@@ -57,6 +58,7 @@ export type MappedUpdate =
   | { kind: 'chat-last-message'; chatId: number; lastMessage: string; time: string }
   | { kind: 'new-message'; message: UiMessage }
   | { kind: 'message-reactions'; chatId: number; messageId: number; reactions: UiReaction[] }
+  | { kind: 'chat-read-inbox'; chatId: number; lastReadInboxMessageId: number; unreadCount: number }
   | { kind: 'connection-state'; state: string }
   | { kind: 'user-status'; userId: number; status: string }
 

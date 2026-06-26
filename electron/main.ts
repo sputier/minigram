@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { app, BrowserWindow, globalShortcut, ipcMain, protocol } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Notification, protocol } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -8,6 +8,8 @@ import {
   addReaction,
   addToWhitelist,
   approvePending,
+  closeChat,
+  getChatName,
   getChats,
   getGroupMembers,
   getHistory,
@@ -15,6 +17,7 @@ import {
   getMoreHistory,
   getPendingRequests,
   getUserAvatars,
+  openChat,
   openPrivateChat,
   rejectPending,
   removeReaction,
@@ -73,6 +76,18 @@ function broadcastAuthState(state: AuthState) {
 
 function broadcastUpdate(update: MappedUpdate) {
   win?.webContents.send('tg:update', update)
+
+  if (update.kind === 'new-message' && !update.message.outgoing && win && !win.isFocused()) {
+    const title = getChatName(update.message.chatId) || 'Nouveau message'
+    const body = update.message.text || '📎 Média'
+    const notif = new Notification({ title, body })
+    notif.on('click', () => {
+      win?.show()
+      win?.focus()
+      win?.webContents.send('tg:focus-chat', update.message.chatId)
+    })
+    notif.show()
+  }
 }
 
 function broadcastChats(chats: UiChat[]) {
@@ -212,6 +227,9 @@ ipcMain.handle('tg:add-reaction', (_event, chatId: number, messageId: number, em
 ipcMain.handle('tg:remove-reaction', (_event, chatId: number, messageId: number, emoji: string) =>
   removeReaction(chatId, messageId, emoji),
 )
+
+ipcMain.handle('tg:open-chat', (_event, chatId: number) => openChat(chatId))
+ipcMain.handle('tg:close-chat', (_event, chatId: number) => closeChat(chatId))
 
 ipcMain.handle('tg:get-group-members', (_event, chatId: number) => getGroupMembers(chatId))
 

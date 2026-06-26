@@ -32,6 +32,9 @@ export interface MinigramApi {
   removeReaction: (chatId: number, messageId: number, emoji: string) => Promise<void>
   getGroupMembers: (chatId: number) => Promise<UiUserAvatar[]>
   openPrivateChat: (userId: number) => Promise<UiChat | null>
+  openChat: (chatId: number) => Promise<void>
+  closeChat: (chatId: number) => Promise<void>
+  onFocusChat: (cb: (chatId: number) => void) => Unsubscribe
 }
 
 const api: MinigramApi = {
@@ -85,6 +88,13 @@ const api: MinigramApi = {
   removeReaction: (chatId, messageId, emoji) => ipcRenderer.invoke('tg:remove-reaction', chatId, messageId, emoji),
   getGroupMembers: (chatId) => ipcRenderer.invoke('tg:get-group-members', chatId),
   openPrivateChat: (userId) => ipcRenderer.invoke('tg:open-private-chat', userId),
+  openChat: (chatId) => ipcRenderer.invoke('tg:open-chat', chatId),
+  closeChat: (chatId) => ipcRenderer.invoke('tg:close-chat', chatId),
+  onFocusChat: (cb) => {
+    const listener = (_event: Electron.IpcRendererEvent, chatId: number) => cb(chatId)
+    ipcRenderer.on('tg:focus-chat', listener)
+    return () => ipcRenderer.off('tg:focus-chat', listener)
+  },
 }
 
 contextBridge.exposeInMainWorld('minigram', api)

@@ -294,8 +294,11 @@ export default function ChatView({
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const membersPanelRef = useRef<HTMLDivElement>(null)
+  const dividerRef = useRef<HTMLDivElement>(null)
   const prevScrollHeightRef = useRef<number | null>(null)
   const prevLastIdRef = useRef<number | null>(null)
+  const justOpenedRef = useRef(true)
+  const snapshotReadIdRef = useRef<number | undefined>(undefined)
 
   function handleScroll() {
     const el = scrollRef.current
@@ -314,7 +317,12 @@ export default function ChatView({
       el.scrollTop += el.scrollHeight - prevScrollHeightRef.current
       prevScrollHeightRef.current = null
     } else if (lastId !== prevLastIdRef.current) {
-      bottomRef.current?.scrollIntoView({ block: 'end' })
+      if (justOpenedRef.current && dividerRef.current) {
+        dividerRef.current.scrollIntoView({ block: 'center' })
+      } else {
+        bottomRef.current?.scrollIntoView({ block: 'end' })
+      }
+      justOpenedRef.current = false
     }
 
     prevLastIdRef.current = lastId
@@ -322,9 +330,11 @@ export default function ChatView({
 
   useEffect(() => {
     prevScrollHeightRef.current = null
+    justOpenedRef.current = true
+    snapshotReadIdRef.current = (chat?.unread ?? 0) > 0 ? chat?.lastReadInboxMessageId : undefined
     setShowMembers(false)
     setGroupMembers([])
-  }, [chat?.id])
+  }, [chat?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!showMembers) return
@@ -428,6 +438,11 @@ export default function ChatView({
               const { isFirst, isLast } = isGroupChat ? senderGroupInfo(messages, index) : { isFirst: false, isLast: false }
               const sender = isGroupChat && message.senderId ? senderAvatars.get(message.senderId) : undefined
 
+              const showDivider =
+                snapshotReadIdRef.current !== undefined &&
+                message.id > snapshotReadIdRef.current &&
+                (index === 0 || messages[index - 1]!.id <= snapshotReadIdRef.current)
+
               const bubbleInner = (outgoing: boolean) => (
                 <div
                   className={`rounded-xl px-3 py-2 text-sm text-white shadow ${
@@ -472,7 +487,15 @@ export default function ChatView({
 
               if (!message.outgoing && isGroupChat && message.senderId) {
                 return (
-                  <div key={message.id} className="flex flex-row items-start gap-2">
+                  <div key={message.id}>
+                  {showDivider && (
+                    <div ref={dividerRef} className="my-3 flex items-center gap-3">
+                      <div className="h-px flex-1 bg-white/10" />
+                      <span className="text-xs text-tg-muted">Nouveaux messages</span>
+                      <div className="h-px flex-1 bg-white/10" />
+                    </div>
+                  )}
+                  <div className="flex flex-row items-start gap-2">
                     {isLast && sender ? (
                       <Avatar
                         photoFileId={sender.photoFileId}
@@ -504,11 +527,20 @@ export default function ChatView({
                       {reactionPills('justify-start')}
                     </div>
                   </div>
+                  </div>
                 )
               }
 
               return (
-                <div key={message.id} className={`flex flex-col ${message.outgoing ? 'items-end' : 'items-start'}`}>
+                <div key={message.id}>
+                  {showDivider && (
+                    <div ref={dividerRef} className="my-3 flex items-center gap-3">
+                      <div className="h-px flex-1 bg-white/10" />
+                      <span className="text-xs text-tg-muted">Nouveaux messages</span>
+                      <div className="h-px flex-1 bg-white/10" />
+                    </div>
+                  )}
+                  <div className={`flex flex-col ${message.outgoing ? 'items-end' : 'items-start'}`}>
                   <div className="group relative max-w-[60%]">
                     {reactionBtn}
                     {pickerMsgId === message.id && (
@@ -516,7 +548,8 @@ export default function ChatView({
                     )}
                     {bubbleInner(message.outgoing)}
                   </div>
-                  {reactionPills(message.outgoing ? 'justify-end' : 'justify-start')}
+                    {reactionPills(message.outgoing ? 'justify-end' : 'justify-start')}
+                  </div>
                 </div>
               )
             })}

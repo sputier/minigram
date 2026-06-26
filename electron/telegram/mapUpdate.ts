@@ -65,6 +65,7 @@ export interface TdChat {
   title: string
   last_message?: TdMessage
   unread_count?: number
+  last_read_inbox_message_id?: number
   photo?: { small?: { id: number } }
 }
 
@@ -113,6 +114,7 @@ export interface UiChat {
   lastMessage: string
   time: string
   unread?: number
+  lastReadInboxMessageId?: number
 }
 
 export interface TdUser {
@@ -135,6 +137,7 @@ export type MappedUpdate =
   | { kind: 'chat-last-message'; chatId: number; lastMessage: string; time: string }
   | { kind: 'new-message'; message: UiMessage }
   | { kind: 'message-reactions'; chatId: number; messageId: number; reactions: UiReaction[] }
+  | { kind: 'chat-read-inbox'; chatId: number; lastReadInboxMessageId: number; unreadCount: number }
   | { kind: 'connection-state'; state: string }
   | { kind: 'user-status'; userId: number; status: string }
 
@@ -309,6 +312,7 @@ export function mapChat(chat: TdChat): UiChat {
     lastMessage: chat.last_message ? extractPreviewText(chat.last_message.content) : '',
     time: chat.last_message ? formatTime(chat.last_message.date) : '',
     unread: chat.unread_count && chat.unread_count > 0 ? chat.unread_count : undefined,
+    lastReadInboxMessageId: chat.last_read_inbox_message_id,
   }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Sidebar from './components/Sidebar'
 import ChatView from './components/ChatView'
 import AdminGate from './components/AdminGate'
@@ -15,6 +15,7 @@ export default function App() {
   const [mediaVersion, setMediaVersion] = useState(0)
   const [latestReadyPhotoFileId, setLatestReadyPhotoFileId] = useState<number | null>(null)
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({ active: false, mediaPending: 0, mediaDone: 0 })
+  const prevActiveChatIdRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     function loadAccount() {
@@ -71,6 +72,20 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    return window.minigram.onFocusChat(setActiveChatId)
+  }, [])
+
+  useEffect(() => {
+    if (prevActiveChatIdRef.current !== undefined) {
+      void window.minigram.closeChat(prevActiveChatIdRef.current)
+    }
+    if (activeChatId !== undefined) {
+      void window.minigram.openChat(activeChatId)
+    }
+    prevActiveChatIdRef.current = activeChatId
+  }, [activeChatId])
+
+  useEffect(() => {
     return window.minigram.onUpdate((update) => {
       if (update.kind === 'new-message') {
         const { chatId } = update.message
@@ -95,6 +110,14 @@ export default function App() {
         setChats((prev) =>
           prev.map((c) =>
             c.id === update.chatId ? { ...c, lastMessage: update.lastMessage, time: update.time } : c,
+          ),
+        )
+      } else if (update.kind === 'chat-read-inbox') {
+        setChats((prev) =>
+          prev.map((c) =>
+            c.id === update.chatId
+              ? { ...c, lastReadInboxMessageId: update.lastReadInboxMessageId, unread: update.unreadCount > 0 ? update.unreadCount : undefined }
+              : c,
           ),
         )
       }
