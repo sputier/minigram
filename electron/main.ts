@@ -146,7 +146,7 @@ app.whenReady().then(() => {
     try {
       const data = await fs.readFile(resolved)
       const ext = path.extname(resolved).toLowerCase()
-      const contentType =
+      const extType =
         ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
         : ext === '.png' ? 'image/png'
         : ext === '.webp' ? 'image/webp'
@@ -156,8 +156,41 @@ app.whenReady().then(() => {
         : ext === '.mp3' ? 'audio/mpeg'
         : ext === '.m4a' ? 'audio/mp4'
         : ext === '.tgs' ? 'application/x-tgsticker'
-        : 'application/octet-stream'
-      return new Response(data, { status: 200, headers: { 'Content-Type': contentType } })
+        : null
+      // Fallback : le renderer passe le mime_type TDLib en query param
+      const mimeParam = url.searchParams.get('mime')
+      const contentType = extType ?? mimeParam ?? 'application/octet-stream'
+
+      // Chromium envoie des requêtes Range pour audio/vidéo (preload + seek).
+      // Sans support 206, l'élément <audio>/<video> refuse de charger le fichier.
+      const rangeHeader = request.headers.get('range')
+      if (rangeHeader) {
+        const m = rangeHeader.match(/bytes=(\d+)-(\d*)/)
+        if (m) {
+          const start = parseInt(m[1]!, 10)
+          const end = m[2] ? parseInt(m[2], 10) : data.length - 1
+          const safeEnd = Math.min(end, data.length - 1)
+          const chunk = data.slice(start, safeEnd + 1)
+          return new Response(chunk, {
+            status: 206,
+            headers: {
+              'Content-Type': contentType,
+              'Content-Range': `bytes ${start}-${safeEnd}/${data.length}`,
+              'Accept-Ranges': 'bytes',
+              'Content-Length': String(chunk.length),
+            },
+          })
+        }
+      }
+
+      return new Response(data, {
+        status: 200,
+        headers: {
+          'Content-Type': contentType,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': String(data.length),
+        },
+      })
     } catch {
       return new Response('Erreur de lecture', { status: 500 })
     }

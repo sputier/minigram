@@ -265,7 +265,8 @@ function MediaBubbleContent({
   onOpenLightbox: (media: UiMediaRef, src: string) => void
 }) {
   const [failed, setFailed] = useState<MediaFailReason | null>(null)
-  const src = `minigram-media://media?id=${media.fileId}&v=${version}`
+  const mimeParam = media.mimeType ? `&mime=${encodeURIComponent(media.mimeType)}` : ''
+  const src = `minigram-media://media?id=${media.fileId}&v=${version}${mimeParam}`
 
   useEffect(() => setFailed(null), [version, media.fileId])
 
