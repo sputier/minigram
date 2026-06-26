@@ -478,7 +478,10 @@ export async function getMe(): Promise<UiSelf | null> {
   const me = (await client.invoke({ _: 'getMe' })) as unknown as TdUser
   const photoId = me.profile_photo?.small?.id
   if (photoId) {
-    await client.invoke({ _: 'downloadFile', file_id: photoId, priority: 1, offset: 0, limit: 0, synchronous: true }).catch(() => {})
+    void client
+      .invoke({ _: 'downloadFile', file_id: photoId, priority: 1, offset: 0, limit: 0, synchronous: true })
+      .then(() => onMediaReady(photoId))
+      .catch(() => {})
   }
   return mapUser(me)
 }
@@ -498,15 +501,17 @@ export async function getChats(): Promise<UiChat[]> {
   tdChats.sort((a, b) => (b.last_message?.date ?? 0) - (a.last_message?.date ?? 0))
   allowedChatIdsCache = new Set(tdChats.map((c) => c.id))
 
-  // Téléchargement en parallèle des photos de profil (petites miniatures ~5KB,
-  // TDLib les met en cache — rapide après le premier chargement).
-  await Promise.all(
-    tdChats
-      .filter((c) => c.photo?.small?.id)
-      .map((c) =>
-        client!.invoke({ _: 'downloadFile', file_id: c.photo!.small!.id, priority: 1, offset: 0, limit: 0, synchronous: true }).catch(() => {}),
-      ),
-  )
+  // Fire-and-forget : ne pas bloquer le retour de getChats() sur les photos.
+  // onMediaReady notifie le renderer à chaque téléchargement terminé pour
+  // déclencher un re-render des avatars.
+  for (const c of tdChats) {
+    const photoId = c.photo?.small?.id
+    if (!photoId) continue
+    void client!
+      .invoke({ _: 'downloadFile', file_id: photoId, priority: 1, offset: 0, limit: 0, synchronous: true })
+      .then(() => onMediaReady(photoId))
+      .catch(() => {})
+  }
 
   enqueueHistorySync(Array.from(allowedChatIdsCache))
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface AvatarProps {
   photoFileId?: number | null
@@ -6,11 +6,16 @@ interface AvatarProps {
   color: string
   className?: string
   title?: string
+  version?: number
 }
 
-export default function Avatar({ photoFileId, initials, color, className = '', title }: AvatarProps) {
+export default function Avatar({ photoFileId, initials, color, className = '', title, version = 0 }: AvatarProps) {
   const [imgFailed, setImgFailed] = useState(false)
-  const src = photoFileId ? `minigram-media://media?id=${photoFileId}&v=0` : null
+  const src = photoFileId ? `minigram-media://media?id=${photoFileId}&v=${version}` : null
+
+  useEffect(() => {
+    setImgFailed(false)
+  }, [src])
 
   if (src && !imgFailed) {
     return (

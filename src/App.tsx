@@ -129,7 +129,7 @@ export default function App() {
   return (
     <div className="relative flex h-screen w-screen overflow-hidden bg-tg-bg text-white">
       <SyncProgressBar {...syncProgress} />
-      <Sidebar self={self} chats={chats} activeChatId={activeChatId} onSelectChat={setActiveChatId} />
+      <Sidebar self={self} chats={chats} activeChatId={activeChatId} onSelectChat={setActiveChatId} mediaVersion={mediaVersion} />
       <ChatView
         chat={activeChat}
         messages={activeChatId !== undefined ? messagesByChat[activeChatId] ?? [] : []}

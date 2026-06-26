@@ -267,6 +267,7 @@ export default function ChatView({
             initials={chat.initials}
             color={chat.color}
             className="h-10 w-10 text-base"
+            version={mediaVersion}
           />
           <div>
             <div className="font-medium text-white">{chat.name}</div>
