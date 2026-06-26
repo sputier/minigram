@@ -11,6 +11,7 @@ interface ChatViewProps {
   hasMore: boolean
   loadingMore: boolean
   mediaVersion: number
+  latestReadyPhotoFileId: number | null
 }
 
 const LOAD_MORE_THRESHOLD_PX = 80
@@ -200,6 +201,7 @@ export default function ChatView({
   hasMore,
   loadingMore,
   mediaVersion,
+  latestReadyPhotoFileId,
 }: ChatViewProps) {
   const [draft, setDraft] = useState('')
   const [lightbox, setLightbox] = useState<{ media: UiMediaRef; src: string } | null>(null)
@@ -267,7 +269,7 @@ export default function ChatView({
             initials={chat.initials}
             color={chat.color}
             className="h-10 w-10 text-base"
-            version={mediaVersion}
+            latestReadyFileId={latestReadyPhotoFileId}
           />
           <div>
             <div className="font-medium text-white">{chat.name}</div>

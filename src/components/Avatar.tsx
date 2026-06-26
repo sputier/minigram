@@ -6,14 +6,22 @@ interface AvatarProps {
   color: string
   className?: string
   title?: string
-  version?: number
+  // fileId spécifique qui vient de se télécharger — Avatar ne réessaie QUE
+  // si c'est exactement son propre photoFileId, évitant les faux retries
+  // (et le clignotement) provoqués par d'autres médias qui se téléchargent.
+  latestReadyFileId?: number | null
 }
 
-export default function Avatar({ photoFileId, initials, color, className = '', title, version = 0 }: AvatarProps) {
+export default function Avatar({
+  photoFileId,
+  initials,
+  color,
+  className = '',
+  title,
+  latestReadyFileId,
+}: AvatarProps) {
   const [imgFailed, setImgFailed] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
-  // Ref pour lire l'état d'échec dans l'effet sans l'ajouter aux deps
-  // (évite de re-setter src pour les avatars qui s'affichent déjà correctement)
   const failedRef = useRef(false)
 
   const src = photoFileId ? `minigram-media://media?id=${photoFileId}&v=${retryCount}` : null
@@ -25,10 +33,11 @@ export default function Avatar({ photoFileId, initials, color, className = '', t
 
   useEffect(() => {
     if (!failedRef.current) return
+    if (latestReadyFileId == null || latestReadyFileId !== photoFileId) return
     failedRef.current = false
     setImgFailed(false)
     setRetryCount((c) => c + 1)
-  }, [version])
+  }, [latestReadyFileId, photoFileId])
 
   if (src && !imgFailed) {
     return (

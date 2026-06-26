@@ -13,6 +13,7 @@ export default function App() {
   const [noMoreHistory, setNoMoreHistory] = useState<Record<number, boolean>>({})
   const [loadingMore, setLoadingMore] = useState(false)
   const [mediaVersion, setMediaVersion] = useState(0)
+  const [latestReadyPhotoFileId, setLatestReadyPhotoFileId] = useState<number | null>(null)
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({ active: false, mediaPending: 0, mediaDone: 0 })
 
   useEffect(() => {
@@ -59,7 +60,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    return window.minigram.onMediaReady(() => setMediaVersion((v) => v + 1))
+    return window.minigram.onMediaReady((fileId) => {
+      setMediaVersion((v) => v + 1)
+      setLatestReadyPhotoFileId(fileId)
+    })
   }, [])
 
   useEffect(() => {
@@ -129,7 +133,7 @@ export default function App() {
   return (
     <div className="relative flex h-screen w-screen overflow-hidden bg-tg-bg text-white">
       <SyncProgressBar {...syncProgress} />
-      <Sidebar self={self} chats={chats} activeChatId={activeChatId} onSelectChat={setActiveChatId} mediaVersion={mediaVersion} />
+      <Sidebar self={self} chats={chats} activeChatId={activeChatId} onSelectChat={setActiveChatId} latestReadyPhotoFileId={latestReadyPhotoFileId} />
       <ChatView
         chat={activeChat}
         messages={activeChatId !== undefined ? messagesByChat[activeChatId] ?? [] : []}
@@ -139,6 +143,7 @@ export default function App() {
         hasMore={activeChatId !== undefined ? !noMoreHistory[activeChatId] : false}
         loadingMore={loadingMore}
         mediaVersion={mediaVersion}
+        latestReadyPhotoFileId={latestReadyPhotoFileId}
       />
       <AdminGate />
     </div>

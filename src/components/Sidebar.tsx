@@ -7,10 +7,10 @@ interface SidebarProps {
   chats: UiChat[]
   activeChatId: number | undefined
   onSelectChat: (id: number) => void
-  mediaVersion: number
+  latestReadyPhotoFileId: number | null
 }
 
-export default function Sidebar({ self, chats, activeChatId, onSelectChat, mediaVersion }: SidebarProps) {
+export default function Sidebar({ self, chats, activeChatId, onSelectChat, latestReadyPhotoFileId }: SidebarProps) {
   const [filter, setFilter] = useState('')
 
   const filteredChats = chats.filter((chat) =>
@@ -21,12 +21,12 @@ export default function Sidebar({ self, chats, activeChatId, onSelectChat, media
     <aside className="flex h-full w-[320px] flex-shrink-0 flex-col bg-tg-sidebar">
       <div className="flex items-center gap-3 px-4 py-3">
         <Avatar
-          photoFileId={self?.photoFileId}
+          photoFileId={self?.photoFileId ?? null}
           initials={self?.initials ?? 'MG'}
           color={self?.color ?? '#2b5278'}
           className="h-9 w-9 text-sm"
           title={self?.name ?? 'Non connecté'}
-          version={mediaVersion}
+          latestReadyFileId={latestReadyPhotoFileId}
         />
         <input
           value={filter}
@@ -50,7 +50,7 @@ export default function Sidebar({ self, chats, activeChatId, onSelectChat, media
               initials={chat.initials}
               color={chat.color}
               className="h-12 w-12 text-lg"
-              version={mediaVersion}
+              latestReadyFileId={latestReadyPhotoFileId}
             />
             <div className="flex-1 overflow-hidden border-b border-tg-border/0 pb-3 pt-0">
               <div className="flex items-baseline justify-between">
