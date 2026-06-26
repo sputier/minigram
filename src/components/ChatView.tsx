@@ -388,7 +388,7 @@ export default function ChatView({
 
               const reactionPills = (justify: 'justify-start' | 'justify-end') =>
                 message.reactions && message.reactions.length > 0 ? (
-                  <div className={`-mt-1 mb-1 flex flex-wrap gap-1 ${justify}`}>
+                  <div className={`relative -mt-1 mb-1 flex flex-wrap gap-1 ${justify}`}>
                     {message.reactions.map((r) => (
                       <ReactionPill key={r.emoji} reaction={r} chatId={message.chatId} messageId={message.id} />
                     ))}
