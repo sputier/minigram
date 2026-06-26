@@ -319,8 +319,8 @@ export default function ChatView({
     } else if (lastId !== prevLastIdRef.current) {
       if (justOpenedRef.current && dividerRef.current) {
         dividerRef.current.scrollIntoView({ block: 'center' })
-      } else {
-        bottomRef.current?.scrollIntoView({ block: 'end' })
+      } else if (el) {
+        el.scrollTop = el.scrollHeight
       }
       justOpenedRef.current = false
     }
@@ -330,6 +330,7 @@ export default function ChatView({
 
   useEffect(() => {
     prevScrollHeightRef.current = null
+    prevLastIdRef.current = null
     justOpenedRef.current = true
     snapshotReadIdRef.current = (chat?.unread ?? 0) > 0 ? chat?.lastReadInboxMessageId : undefined
     setShowMembers(false)
