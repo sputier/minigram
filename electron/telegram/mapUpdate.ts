@@ -362,7 +362,16 @@ export function extractPendingCandidate(update: TdUpdate, whitelist: Whitelist):
 export function mapUpdate(update: TdUpdate, whitelist: Whitelist): MappedUpdate | null {
   try {
     switch (update._) {
-      case 'updateNewMessage':
+      case 'updateNewMessage': {
+        const message = (update as { message?: TdMessage }).message
+        if (!message || typeof message.chat_id !== 'number') return null
+        if (!isMessageAllowed(message, whitelist)) return null
+        // updateMessageSendSucceeded arrive ensuite avec l'ID définitif pour
+        // les messages sortants — ignorer updateNewMessage outgoing pour éviter
+        // le doublon (ID temporaire puis ID serveur).
+        if (message.is_outgoing) return null
+        return { kind: 'new-message', message: mapMessage(message) }
+      }
       case 'updateMessageSendSucceeded': {
         const message = (update as { message?: TdMessage }).message
         if (!message || typeof message.chat_id !== 'number') return null

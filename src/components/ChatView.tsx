@@ -299,6 +299,7 @@ export default function ChatView({
   const prevLastIdRef = useRef<number | null>(null)
   const justOpenedRef = useRef(true)
   const snapshotReadIdRef = useRef<number | undefined>(undefined)
+  const prevChatIdForScrollRef = useRef<number | undefined>(undefined)
 
   function handleScroll() {
     const el = scrollRef.current
@@ -312,6 +313,20 @@ export default function ChatView({
   useLayoutEffect(() => {
     const el = scrollRef.current
     const lastId = messages.at(-1)?.id ?? null
+    const chatChanged = chat?.id !== prevChatIdForScrollRef.current
+
+    if (chatChanged) {
+      // Réinitialiser tout l'état de scroll quand on change de chat.
+      // Doit être fait ici (pas dans useEffect) car useEffect s'exécute
+      // APRÈS useLayoutEffect — si on attendait useEffect, justOpenedRef
+      // serait encore false de l'ancien chat pour le premier useLayoutEffect
+      // du nouveau, ce qui empêchait le scroll vers le bas.
+      prevChatIdForScrollRef.current = chat?.id
+      prevLastIdRef.current = null
+      prevScrollHeightRef.current = null
+      snapshotReadIdRef.current = undefined // nettoyage du snapshot périmé
+      justOpenedRef.current = true
+    }
 
     if (prevScrollHeightRef.current !== null && el) {
       el.scrollTop += el.scrollHeight - prevScrollHeightRef.current
@@ -326,13 +341,15 @@ export default function ChatView({
     }
 
     prevLastIdRef.current = lastId
-  }, [messages])
+  }, [messages, chat?.id])
 
   useEffect(() => {
-    prevScrollHeightRef.current = null
-    prevLastIdRef.current = null
-    justOpenedRef.current = true
-    snapshotReadIdRef.current = (chat?.unread ?? 0) > 0 ? chat?.lastReadInboxMessageId : undefined
+    // Positionne le snapshot APRÈS que useLayoutEffect a nettoyé l'ancien.
+    // Pour les chats sans messages en cache, ce snapshot est prêt quand
+    // getHistory revient (useEffect s'exécute avant que l'IPC réponde).
+    if ((chat?.unread ?? 0) > 0) {
+      snapshotReadIdRef.current = chat?.lastReadInboxMessageId
+    }
     setShowMembers(false)
     setGroupMembers([])
   }, [chat?.id]) // eslint-disable-line react-hooks/exhaustive-deps
