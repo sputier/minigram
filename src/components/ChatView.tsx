@@ -192,7 +192,7 @@ function ReactionPill({ reaction, chatId, messageId, onReactionToggle }: { react
   )
 }
 
-type MediaFailReason = 'pending' | 'unsupported'
+type MediaFailReason = 'pending'
 
 function VoicePlayer({ src, onError }: { src: string; onError: () => void }) {
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -270,10 +270,7 @@ function MediaBubbleContent({
   useEffect(() => setFailed(null), [version, media.fileId])
 
   if (failed) {
-    const msg = failed === 'unsupported'
-      ? 'Format vidéo non supporté par le lecteur intégré.'
-      : 'Téléchargement du média en cours…'
-    return <div className="text-xs italic text-white/60">{msg}</div>
+    return <div className="text-xs italic text-white/60">Téléchargement du média en cours…</div>
   }
 
   const canLightbox = media.kind === 'photo' || media.kind === 'video' || media.kind === 'animation' || media.kind === 'sticker'
@@ -296,11 +293,7 @@ function MediaBubbleContent({
         <div className={canLightbox ? 'relative cursor-zoom-in' : ''} onClick={canLightbox ? () => onOpenLightbox(media, src) : undefined}>
           <video
             src={src}
-            onError={(e) => {
-              const code = (e.target as HTMLVideoElement).error?.code
-              // MEDIA_ERR_DECODE = 3, MEDIA_ERR_SRC_NOT_SUPPORTED = 4
-              setFailed(code === 3 || code === 4 ? 'unsupported' : 'pending')
-            }}
+            onError={() => setFailed('pending')}
             controls={false}
             autoPlay={media.kind === 'animation'}
             loop={media.kind === 'animation'}
