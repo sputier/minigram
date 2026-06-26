@@ -476,6 +476,10 @@ export function submitAuthPassword(password: string): void {
 export async function getMe(): Promise<UiSelf | null> {
   if (!client) return null
   const me = (await client.invoke({ _: 'getMe' })) as unknown as TdUser
+  const photoId = me.profile_photo?.small?.id
+  if (photoId) {
+    await client.invoke({ _: 'downloadFile', file_id: photoId, priority: 1, offset: 0, limit: 0, synchronous: true }).catch(() => {})
+  }
   return mapUser(me)
 }
 
@@ -493,6 +497,16 @@ export async function getChats(): Promise<UiChat[]> {
 
   tdChats.sort((a, b) => (b.last_message?.date ?? 0) - (a.last_message?.date ?? 0))
   allowedChatIdsCache = new Set(tdChats.map((c) => c.id))
+
+  // Téléchargement en parallèle des photos de profil (petites miniatures ~5KB,
+  // TDLib les met en cache — rapide après le premier chargement).
+  await Promise.all(
+    tdChats
+      .filter((c) => c.photo?.small?.id)
+      .map((c) =>
+        client!.invoke({ _: 'downloadFile', file_id: c.photo!.small!.id, priority: 1, offset: 0, limit: 0, synchronous: true }).catch(() => {}),
+      ),
+  )
 
   enqueueHistorySync(Array.from(allowedChatIdsCache))
 

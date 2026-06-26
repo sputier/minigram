@@ -36,6 +36,7 @@ export interface UiChat {
   name: string
   initials: string
   color: string
+  photoFileId: number | null
   lastMessage: string
   time: string
   unread?: number
@@ -46,6 +47,7 @@ export interface UiSelf {
   name: string
   initials: string
   color: string
+  photoFileId: number | null
 }
 
 export type MappedUpdate =

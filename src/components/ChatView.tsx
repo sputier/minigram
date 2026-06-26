@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import Avatar from './Avatar'
 import type { UiChat, UiMediaRef, UiMessage, UiReaction, UiUserAvatar } from '../types/telegram'
 
 interface ChatViewProps {
@@ -69,26 +70,13 @@ function Lightbox({ media, src, onClose }: LightboxProps) {
 }
 
 function UserAvatarMini({ avatar }: { avatar: UiUserAvatar }) {
-  const [imgFailed, setImgFailed] = useState(false)
-  const src = avatar.photoFileId ? `minigram-media://media?id=${avatar.photoFileId}&v=0` : null
-
-  if (src && !imgFailed) {
-    return (
-      <img
-        src={src}
-        onError={() => setImgFailed(true)}
-        className="-ml-1 first:ml-0 h-[18px] w-[18px] rounded-full object-cover ring-1 ring-tg-bg"
-      />
-    )
-  }
-
   return (
-    <div
-      className="-ml-1 first:ml-0 flex h-[18px] w-[18px] items-center justify-center rounded-full text-[8px] font-bold text-white ring-1 ring-tg-bg"
-      style={{ backgroundColor: avatar.color }}
-    >
-      {avatar.initials}
-    </div>
+    <Avatar
+      photoFileId={avatar.photoFileId}
+      initials={avatar.initials}
+      color={avatar.color}
+      className="-ml-1 h-[18px] w-[18px] text-[8px] font-bold ring-1 ring-tg-bg first:ml-0"
+    />
   )
 }
 
@@ -274,12 +262,12 @@ export default function ChatView({
 
       <div className="flex h-full flex-1 flex-col bg-tg-bg">
         <header className="flex items-center gap-3 border-b border-tg-border px-5 py-3">
-          <div
-            className="flex h-10 w-10 items-center justify-center rounded-full text-base font-medium text-white"
-            style={{ backgroundColor: chat.color }}
-          >
-            {chat.initials}
-          </div>
+          <Avatar
+            photoFileId={chat.photoFileId}
+            initials={chat.initials}
+            color={chat.color}
+            className="h-10 w-10 text-base"
+          />
           <div>
             <div className="font-medium text-white">{chat.name}</div>
           </div>

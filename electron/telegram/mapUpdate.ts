@@ -63,6 +63,7 @@ export interface TdChat {
   title: string
   last_message?: TdMessage
   unread_count?: number
+  photo?: { small?: { id: number } }
 }
 
 export type TdUpdate =
@@ -104,6 +105,7 @@ export interface UiChat {
   name: string
   initials: string
   color: string
+  photoFileId: number | null
   lastMessage: string
   time: string
   unread?: number
@@ -122,6 +124,7 @@ export interface UiSelf {
   name: string
   initials: string
   color: string
+  photoFileId: number | null
 }
 
 export type MappedUpdate =
@@ -281,6 +284,7 @@ export function mapUser(user: TdUser): UiSelf {
     name: name || 'Compte connecté',
     initials: initialsForTitle(name),
     color: colorForId(user.id),
+    photoFileId: user.profile_photo?.small?.id ?? null,
   }
 }
 
@@ -290,6 +294,7 @@ export function mapChat(chat: TdChat): UiChat {
     name: chat.title,
     initials: initialsForTitle(chat.title),
     color: colorForId(chat.id),
+    photoFileId: chat.photo?.small?.id ?? null,
     lastMessage: chat.last_message ? extractPreviewText(chat.last_message.content) : '',
     time: chat.last_message ? formatTime(chat.last_message.date) : '',
     unread: chat.unread_count && chat.unread_count > 0 ? chat.unread_count : undefined,

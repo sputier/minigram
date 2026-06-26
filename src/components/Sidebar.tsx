@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Avatar from './Avatar'
 import type { UiChat, UiSelf } from '../types/telegram'
 
 interface SidebarProps {
@@ -18,13 +19,13 @@ export default function Sidebar({ self, chats, activeChatId, onSelectChat }: Sid
   return (
     <aside className="flex h-full w-[320px] flex-shrink-0 flex-col bg-tg-sidebar">
       <div className="flex items-center gap-3 px-4 py-3">
-        <div
-          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm font-medium text-white"
-          style={{ backgroundColor: self?.color ?? '#2b5278' }}
+        <Avatar
+          photoFileId={self?.photoFileId}
+          initials={self?.initials ?? 'MG'}
+          color={self?.color ?? '#2b5278'}
+          className="h-9 w-9 text-sm"
           title={self?.name ?? 'Non connecté'}
-        >
-          {self?.initials ?? 'MG'}
-        </div>
+        />
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -42,12 +43,12 @@ export default function Sidebar({ self, chats, activeChatId, onSelectChat }: Sid
               chat.id === activeChatId ? 'bg-tg-bg' : 'hover:bg-white/5'
             }`}
           >
-            <div
-              className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full text-lg font-medium text-white"
-              style={{ backgroundColor: chat.color }}
-            >
-              {chat.initials}
-            </div>
+            <Avatar
+              photoFileId={chat.photoFileId}
+              initials={chat.initials}
+              color={chat.color}
+              className="h-12 w-12 text-lg"
+            />
             <div className="flex-1 overflow-hidden border-b border-tg-border/0 pb-3 pt-0">
               <div className="flex items-baseline justify-between">
                 <span className="truncate font-medium text-white">{chat.name}</span>
