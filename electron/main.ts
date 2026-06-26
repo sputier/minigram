@@ -96,8 +96,10 @@ app.whenReady().then(() => {
   // via resolveFilePath (qui interroge TDLib lui-même, getFile) — le
   // renderer ne peut donc jamais demander un chemin arbitraire. Vérification
   // supplémentaire en profondeur : le chemin résolu doit rester dans
-  // td_files, au cas où TDLib renverrait un jour autre chose.
+  // td_files (médias de messages) ou td_db (photos de profil, stockées
+  // par TDLib dans databaseDirectory/profile_photos/).
   const filesDirectory = path.resolve(path.join(app.getPath('userData'), 'td_files'))
+  const databaseDirectory = path.resolve(path.join(app.getPath('userData'), 'td_db'))
 
   // URL scheme : minigram-media://media?id=FILEID&v=VERSION
   // On passe fileId en query param plutôt qu'en hostname : Chromium normalise
@@ -116,7 +118,9 @@ app.whenReady().then(() => {
     }
 
     const resolved = path.resolve(localPath)
-    if (resolved !== filesDirectory && !resolved.startsWith(filesDirectory + path.sep)) {
+    const inFilesDir = resolved === filesDirectory || resolved.startsWith(filesDirectory + path.sep)
+    const inDbDir = resolved === databaseDirectory || resolved.startsWith(databaseDirectory + path.sep)
+    if (!inFilesDir && !inDbDir) {
       return new Response('Accès refusé', { status: 403 })
     }
 
