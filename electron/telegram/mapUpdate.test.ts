@@ -110,7 +110,7 @@ describe('extractMedia', () => {
   it('extrait un message vocal', () => {
     const content: TdMessageContent = {
       _: 'messageVoiceNote',
-      voice_note: { _: 'voiceNote', voice_note: file, mime_type: 'audio/ogg' },
+      voice_note: { _: 'voiceNote', voice: file, mime_type: 'audio/ogg' },
     }
     expect(extractMedia(content)).toEqual({ fileId: 555, kind: 'voice', mimeType: 'audio/ogg' })
   })

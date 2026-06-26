@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import { app, BrowserWindow, globalShortcut, ipcMain, Notification, protocol } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -104,6 +105,14 @@ function broadcastSyncProgress(progress: SyncProgress) {
 
 app.whenReady().then(() => {
   createWindow()
+
+  // En production seulement (VITE_DEV_SERVER_URL absent) : vérifie si une
+  // nouvelle version est disponible sur GitHub Releases et notifie l'utilisateur.
+  // La mise à jour est téléchargée en arrière-plan ; l'installation se fait
+  // au prochain redémarrage de l'app.
+  if (!VITE_DEV_SERVER_URL) {
+    autoUpdater.checkForUpdatesAndNotify()
+  }
 
   globalShortcut.register(ADMIN_GATE_SHORTCUT, () => {
     win?.webContents.send('admin:toggle-gate')
