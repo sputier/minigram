@@ -318,12 +318,10 @@ export default function ChatView({
               const { isFirst, isLast } = isGroupChat ? senderGroupInfo(messages, index) : { isFirst: false, isLast: false }
               const sender = isGroupChat && message.senderId ? senderAvatars.get(message.senderId) : undefined
 
-              const bubble = (
+              const bubbleInner = (outgoing: boolean) => (
                 <div
-                  className={`max-w-[60%] rounded-xl px-3 py-2 text-sm text-white shadow ${
-                    message.outgoing
-                      ? 'rounded-br-sm bg-tg-bubble-out'
-                      : 'rounded-bl-sm bg-tg-bubble-in'
+                  className={`rounded-xl px-3 py-2 text-sm text-white shadow ${
+                    outgoing ? 'rounded-br-sm bg-tg-bubble-out' : 'rounded-bl-sm bg-tg-bubble-in'
                   }`}
                 >
                   {message.media && (
@@ -342,7 +340,7 @@ export default function ChatView({
 
               if (!message.outgoing && isGroupChat && message.senderId) {
                 return (
-                  <div key={message.id} className="flex flex-row items-end gap-2">
+                  <div key={message.id} className="flex flex-row items-start gap-2">
                     {isLast && sender ? (
                       <Avatar
                         photoFileId={sender.photoFileId}
@@ -353,7 +351,7 @@ export default function ChatView({
                     ) : (
                       <div className="h-8 w-8 flex-shrink-0" />
                     )}
-                    <div className="flex flex-col items-start">
+                    <div className="flex max-w-[60%] flex-col items-start">
                       {isFirst && sender && (
                         <span
                           className="mb-0.5 ml-1 text-xs font-semibold"
@@ -362,7 +360,7 @@ export default function ChatView({
                           {sender.name}
                         </span>
                       )}
-                      {bubble}
+                      {bubbleInner(false)}
                       {message.reactions && message.reactions.length > 0 && (
                         <div className="-mt-1 mb-1 flex flex-wrap gap-1 justify-start">
                           {message.reactions.map((r) => (
@@ -377,7 +375,7 @@ export default function ChatView({
 
               return (
                 <div key={message.id} className={`flex flex-col ${message.outgoing ? 'items-end' : 'items-start'}`}>
-                  {bubble}
+                  <div className="max-w-[60%]">{bubbleInner(message.outgoing)}</div>
                   {message.reactions && message.reactions.length > 0 && (
                     <div className={`-mt-1 mb-1 flex flex-wrap gap-1 ${message.outgoing ? 'justify-end' : 'justify-start'}`}>
                       {message.reactions.map((r) => (
