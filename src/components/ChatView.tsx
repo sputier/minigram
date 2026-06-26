@@ -128,7 +128,7 @@ function EmojiPicker({ message, onClose }: { message: UiMessage; onClose: () => 
   return (
     <div
       ref={ref}
-      className="absolute bottom-full left-0 z-20 mb-1 flex rounded-full bg-[#1e2c3a] px-2 py-1.5 shadow-xl ring-1 ring-white/10"
+      className="absolute bottom-full left-0 z-20 flex rounded-full bg-[#1e2c3a] px-2 py-1.5 shadow-xl ring-1 ring-white/10"
     >
       {QUICK_REACTIONS.map((emoji) => {
         const chosen = message.reactions?.find((r) => r.emoji === emoji)?.chosen ?? false
@@ -400,7 +400,7 @@ export default function ChatView({
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={() => setPickerMsgId((id) => (id === message.id ? null : message.id))}
                   className={`absolute top-1 hidden h-6 w-6 items-center justify-center rounded-full bg-[#1e2c3a] text-sm text-white/50 shadow ring-1 ring-white/10 hover:text-white group-hover:flex ${
-                    message.outgoing ? '-left-7' : '-right-7'
+                    message.outgoing ? '-left-6' : '-right-6'
                   }`}
                   title="Ajouter une réaction"
                 >
