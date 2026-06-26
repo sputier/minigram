@@ -19,6 +19,7 @@ export interface UiUserAvatar {
   photoFileId: number | null
   initials: string
   color: string
+  name: string
 }
 
 export interface UiMessage {
@@ -27,6 +28,7 @@ export interface UiMessage {
   text: string
   time: string
   outgoing: boolean
+  senderId?: number
   media?: UiMediaRef
   reactions?: UiReaction[]
 }
@@ -37,6 +39,7 @@ export interface UiChat {
   initials: string
   color: string
   photoFileId: number | null
+  isGroup: boolean
   lastMessage: string
   time: string
   unread?: number

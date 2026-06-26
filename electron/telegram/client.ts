@@ -655,6 +655,7 @@ export interface UiUserAvatar {
   photoFileId: number | null
   initials: string
   color: string
+  name: string
 }
 
 export async function getUserAvatars(userIds: number[]): Promise<UiUserAvatar[]> {
@@ -663,7 +664,7 @@ export async function getUserAvatars(userIds: number[]): Promise<UiUserAvatar[]>
     userIds.map(async (userId) => {
       try {
         const user = (await client!.invoke({ _: 'getUser', user_id: userId })) as unknown as TdUser
-        const { initials, color } = mapUser(user)
+        const { initials, color, name } = mapUser(user)
         let photoFileId: number | null = null
         const smallId = user.profile_photo?.small?.id
         if (smallId) {
@@ -674,9 +675,9 @@ export async function getUserAvatars(userIds: number[]): Promise<UiUserAvatar[]>
             // photo indisponible, fallback sur les initiales
           }
         }
-        return { userId, photoFileId, initials, color }
+        return { userId, photoFileId, initials, color, name }
       } catch {
-        return { userId, photoFileId: null, initials: '?', color: colorForId(userId) }
+        return { userId, photoFileId: null, initials: '?', color: colorForId(userId), name: `Utilisateur ${userId}` }
       }
     }),
   )

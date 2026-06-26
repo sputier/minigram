@@ -96,6 +96,7 @@ export interface UiMessage {
   text: string
   time: string
   outgoing: boolean
+  senderId?: number
   media?: UiMediaRef
   reactions?: UiReaction[]
 }
@@ -106,6 +107,7 @@ export interface UiChat {
   initials: string
   color: string
   photoFileId: number | null
+  isGroup: boolean
   lastMessage: string
   time: string
   unread?: number
@@ -266,12 +268,17 @@ function extractReactions(info?: TdMessageInteractionInfo): UiReaction[] | undef
 export function mapMessage(message: TdMessage): UiMessage {
   const media = extractMedia(message.content)
   const reactions = extractReactions(message.interaction_info)
+  const senderId =
+    message.sender_id?._ === 'messageSenderUser' && !message.is_outgoing
+      ? message.sender_id.user_id
+      : undefined
   return {
     id: message.id,
     chatId: message.chat_id,
     text: extractText(message.content),
     time: formatTime(message.date),
     outgoing: Boolean(message.is_outgoing),
+    ...(senderId ? { senderId } : {}),
     ...(media ? { media } : {}),
     ...(reactions ? { reactions } : {}),
   }
@@ -289,12 +296,14 @@ export function mapUser(user: TdUser): UiSelf {
 }
 
 export function mapChat(chat: TdChat): UiChat {
+  const t = chat.type?._
   return {
     id: chat.id,
     name: chat.title,
     initials: initialsForTitle(chat.title),
     color: colorForId(chat.id),
     photoFileId: chat.photo?.small?.id ?? null,
+    isGroup: t === 'chatTypeBasicGroup' || t === 'chatTypeSupergroup',
     lastMessage: chat.last_message ? extractPreviewText(chat.last_message.content) : '',
     time: chat.last_message ? formatTime(chat.last_message.date) : '',
     unread: chat.unread_count && chat.unread_count > 0 ? chat.unread_count : undefined,

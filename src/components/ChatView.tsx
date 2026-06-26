@@ -2,6 +2,37 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Avatar from './Avatar'
 import type { UiChat, UiMediaRef, UiMessage, UiReaction, UiUserAvatar } from '../types/telegram'
 
+function useSenderAvatars(messages: UiMessage[], isGroup: boolean) {
+  const cacheRef = useRef<Map<number, UiUserAvatar>>(new Map())
+  const [avatars, setAvatars] = useState<Map<number, UiUserAvatar>>(new Map())
+
+  useEffect(() => {
+    if (!isGroup) return
+    const ids = [
+      ...new Set(messages.filter((m) => !m.outgoing && m.senderId != null).map((m) => m.senderId!)),
+    ]
+    const missing = ids.filter((id) => !cacheRef.current.has(id))
+    if (missing.length === 0) return
+    window.minigram.getUserAvatars(missing).then((results) => {
+      for (const a of results) cacheRef.current.set(a.userId, a)
+      setAvatars(new Map(cacheRef.current))
+    })
+  }, [messages, isGroup]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  return avatars
+}
+
+function senderGroupInfo(messages: UiMessage[], index: number) {
+  const msg = messages[index]
+  if (msg.outgoing || !msg.senderId) return { isFirst: false, isLast: false }
+  const prev = messages[index - 1]
+  const next = messages[index + 1]
+  return {
+    isFirst: !prev || prev.outgoing || prev.senderId !== msg.senderId,
+    isLast: !next || next.outgoing || next.senderId !== msg.senderId,
+  }
+}
+
 interface ChatViewProps {
   chat: UiChat | undefined
   messages: UiMessage[]
@@ -205,6 +236,7 @@ export default function ChatView({
 }: ChatViewProps) {
   const [draft, setDraft] = useState('')
   const [lightbox, setLightbox] = useState<{ media: UiMediaRef; src: string } | null>(null)
+  const senderAvatars = useSenderAvatars(messages, chat?.isGroup ?? false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevScrollHeightRef = useRef<number | null>(null)
@@ -281,11 +313,12 @@ export default function ChatView({
             {loadingMore && (
               <div className="py-2 text-center text-xs text-tg-muted">Chargement de l'historique…</div>
             )}
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex flex-col ${message.outgoing ? 'items-end' : 'items-start'}`}
-              >
+            {messages.map((message, index) => {
+              const isGroupChat = chat.isGroup
+              const { isFirst, isLast } = isGroupChat ? senderGroupInfo(messages, index) : { isFirst: false, isLast: false }
+              const sender = isGroupChat && message.senderId ? senderAvatars.get(message.senderId) : undefined
+
+              const bubble = (
                 <div
                   className={`max-w-[60%] rounded-xl px-3 py-2 text-sm text-white shadow ${
                     message.outgoing
@@ -305,15 +338,56 @@ export default function ChatView({
                   {message.text && <div>{message.text}</div>}
                   <div className="mt-1 text-right text-[10px] text-white/50">{message.time}</div>
                 </div>
-                {message.reactions && message.reactions.length > 0 && (
-                  <div className={`-mt-1 mb-1 flex flex-wrap gap-1 ${message.outgoing ? 'justify-end' : 'justify-start'}`}>
-                    {message.reactions.map((r) => (
-                      <ReactionPill key={r.emoji} reaction={r} />
-                    ))}
+              )
+
+              if (!message.outgoing && isGroupChat && message.senderId) {
+                return (
+                  <div key={message.id} className="flex flex-row items-end gap-2">
+                    {isLast && sender ? (
+                      <Avatar
+                        photoFileId={sender.photoFileId}
+                        initials={sender.initials}
+                        color={sender.color}
+                        className="h-8 w-8 flex-shrink-0 text-xs"
+                      />
+                    ) : (
+                      <div className="h-8 w-8 flex-shrink-0" />
+                    )}
+                    <div className="flex flex-col items-start">
+                      {isFirst && sender && (
+                        <span
+                          className="mb-0.5 ml-1 text-xs font-semibold"
+                          style={{ color: sender.color }}
+                        >
+                          {sender.name}
+                        </span>
+                      )}
+                      {bubble}
+                      {message.reactions && message.reactions.length > 0 && (
+                        <div className="-mt-1 mb-1 flex flex-wrap gap-1 justify-start">
+                          {message.reactions.map((r) => (
+                            <ReactionPill key={r.emoji} reaction={r} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
+                )
+              }
+
+              return (
+                <div key={message.id} className={`flex flex-col ${message.outgoing ? 'items-end' : 'items-start'}`}>
+                  {bubble}
+                  {message.reactions && message.reactions.length > 0 && (
+                    <div className={`-mt-1 mb-1 flex flex-wrap gap-1 ${message.outgoing ? 'justify-end' : 'justify-start'}`}>
+                      {message.reactions.map((r) => (
+                        <ReactionPill key={r.emoji} reaction={r} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             <div ref={bottomRef} />
           </div>
         </div>
