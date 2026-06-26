@@ -194,6 +194,67 @@ function ReactionPill({ reaction, chatId, messageId, onReactionToggle }: { react
 
 type MediaFailReason = 'pending' | 'unsupported'
 
+function VoicePlayer({ src, onError }: { src: string; onError: () => void }) {
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [playing, setPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+
+  useEffect(() => () => { audioRef.current?.pause() }, [])
+
+  function toggle() {
+    const audio = audioRef.current
+    if (!audio) return
+    if (playing) audio.pause()
+    else void audio.play()
+  }
+
+  function handleSeek(e: React.MouseEvent<HTMLDivElement>) {
+    const audio = audioRef.current
+    if (!audio || !duration) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    audio.currentTime = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration
+  }
+
+  function fmt(s: number) {
+    if (!isFinite(s) || s < 0) return '0:00'
+    return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
+  }
+
+  const progress = duration > 0 ? currentTime / duration : 0
+
+  return (
+    <div className="flex min-w-[200px] items-center gap-2.5 py-0.5">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onError={onError}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setCurrentTime(0); if (audioRef.current) audioRef.current.currentTime = 0 }}
+        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
+      />
+      <button
+        onClick={toggle}
+        className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 active:bg-white/40"
+      >
+        <span className="text-base leading-none">{playing ? '⏸' : '▶'}</span>
+      </button>
+      <div className="flex flex-1 flex-col gap-1.5">
+        <div
+          className="relative h-1.5 cursor-pointer overflow-hidden rounded-full bg-white/20"
+          onClick={handleSeek}
+        >
+          <div className="absolute inset-y-0 left-0 rounded-full bg-white/70" style={{ width: `${progress * 100}%` }} />
+        </div>
+        <div className="text-[10px] text-white/50">{playing ? fmt(currentTime) : fmt(duration || currentTime)}</div>
+      </div>
+    </div>
+  )
+}
+
 function MediaBubbleContent({
   media,
   version,
@@ -256,7 +317,7 @@ function MediaBubbleContent({
         </div>
       )
     case 'voice':
-      return <audio src={src} controls onError={() => setFailed('pending')} className="max-w-full" />
+      return <VoicePlayer src={src} onError={() => setFailed('pending')} />
     case 'document':
       return (
         <a
