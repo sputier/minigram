@@ -9,6 +9,7 @@ declare global {
       onAdminGateToggle: (cb: () => void) => Unsubscribe
       submitAdminPassword: (password: string) => Promise<{ ok: boolean }>
       onAuthState: (cb: (state: AuthState) => void) => Unsubscribe
+      getAuthState: () => Promise<AuthState>
       submitPhoneNumber: (phone: string) => Promise<void>
       submitAuthCode: (code: string) => Promise<void>
       submitAuthPassword: (password: string) => Promise<void>

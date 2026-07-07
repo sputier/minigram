@@ -10,6 +10,7 @@ export interface MinigramApi {
   onAdminGateToggle: (cb: () => void) => Unsubscribe
   submitAdminPassword: (password: string) => Promise<{ ok: boolean }>
   onAuthState: (cb: (state: AuthState) => void) => Unsubscribe
+  getAuthState: () => Promise<AuthState>
   submitPhoneNumber: (phone: string) => Promise<void>
   submitAuthCode: (code: string) => Promise<void>
   submitAuthPassword: (password: string) => Promise<void>
@@ -50,6 +51,7 @@ const api: MinigramApi = {
     ipcRenderer.on('tg:auth-state', listener)
     return () => ipcRenderer.off('tg:auth-state', listener)
   },
+  getAuthState: () => ipcRenderer.invoke('tg:get-auth-state'),
   submitPhoneNumber: (phone) => ipcRenderer.invoke('admin:submit-phone', phone),
   submitAuthCode: (code) => ipcRenderer.invoke('admin:submit-code', code),
   submitAuthPassword: (password) => ipcRenderer.invoke('admin:submit-auth-password', password),

@@ -17,6 +17,12 @@ export default function AdminGate() {
   useEffect(() => {
     const offToggle = window.minigram.onAdminGateToggle(() => setVisible((v) => !v))
     const offAuthState = window.minigram.onAuthState((state) => setAuthState(state))
+    // Le main process peut déjà avoir émis un état (ex: authorizationStateReady
+    // arrive très vite si la session est valide) avant que ce composant ait
+    // fini de monter et de s'abonner — l'event push correspondant serait alors
+    // perdu, laissant l'UI bloquée indéfiniment sur l'état par défaut 'idle'.
+    // On récupère donc aussi l'état actuel explicitement au montage.
+    window.minigram.getAuthState().then(setAuthState)
     return () => {
       offToggle()
       offAuthState()

@@ -10,6 +10,7 @@ import {
   addToWhitelist,
   approvePending,
   closeChat,
+  getAuthState,
   getChatName,
   getChats,
   getGroupMembers,
@@ -225,6 +226,8 @@ ipcMain.handle('admin:submit-password', (_event, password: string) => {
   if (ok) startLogin()
   return { ok }
 })
+
+ipcMain.handle('tg:get-auth-state', () => getAuthState())
 
 ipcMain.handle('admin:submit-phone', (_event, phone: string) => {
   submitPhoneNumber(phone)

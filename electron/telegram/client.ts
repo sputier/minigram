@@ -101,10 +101,27 @@ let pendingPhone: Deferred<string> | null = null
 let pendingCode: Deferred<string> | null = null
 let pendingPassword: Deferred<string> | null = null
 
-let onAuthStateChange: (state: AuthState) => void = () => {}
+let onAuthStateBroadcast: (state: AuthState) => void = () => {}
 let onMappedUpdate: (update: MappedUpdate) => void = () => {}
 let onMediaReady: (fileId: number) => void = () => {}
 let onSyncProgressChange: (progress: SyncProgress) => void = () => {}
+
+// Le renderer peut monter son listener onAuthState après qu'un état ait déjà
+// été émis (ex: authorizationStateReady arrive très vite si la session est
+// déjà valide, potentiellement avant que React ait fini de charger) — un
+// event push pur perdrait ce cas silencieusement, laissant l'UI bloquée sur
+// l'état par défaut 'idle' pour toujours. On mémorise donc le dernier état
+// pour que le renderer puisse aussi le récupérer à la demande (getAuthState).
+let lastAuthState: AuthState = { step: 'idle' }
+
+function onAuthStateChange(state: AuthState): void {
+  lastAuthState = state
+  onAuthStateBroadcast(state)
+}
+
+export function getAuthState(): AuthState {
+  return lastAuthState
+}
 
 const chatNameCache = new Map<number, string>()
 
@@ -125,7 +142,7 @@ export interface StartClientOptions {
 }
 
 export function startClient(options: StartClientOptions): void {
-  onAuthStateChange = options.onAuthState
+  onAuthStateBroadcast = options.onAuthState
   onMappedUpdate = options.onUpdate
   onMediaReady = options.onMediaReady ?? (() => {})
   onSyncProgressChange = options.onSyncProgress ?? (() => {})
