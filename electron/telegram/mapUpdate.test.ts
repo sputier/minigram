@@ -38,6 +38,18 @@ const strangerMessage: TdMessage = {
   content: { _: 'messageText', text: { _: 'formattedText', text: 'Bonjour inconnu' } },
 }
 
+// Chat privé : en TDLib, chat_id est strictement positif et égal à l'user_id
+// du correspondant — contrairement à un groupe (chat_id négatif).
+const privateStrangerMessage: TdMessage = {
+  _: 'message',
+  id: 4,
+  chat_id: 999,
+  sender_id: { _: 'messageSenderUser', user_id: 999 },
+  is_outgoing: false,
+  date: 1_700_000_000,
+  content: { _: 'messageText', text: { _: 'formattedText', text: 'Bonjour inconnu' } },
+}
+
 const photoMessage: TdMessage = {
   ...allowedGroupMessage,
   id: 3,
@@ -152,9 +164,16 @@ describe('isMessageAllowed', () => {
     expect(isMessageAllowed(strangerMessage, whitelist)).toBe(false)
   })
 
-  it("autorise via l'user_id même si le chat_id n'est pas dans la liste", () => {
-    const privateMessage: TdMessage = { ...strangerMessage, chat_id: -3003, sender_id: { _: 'messageSenderUser', user_id: 111 } }
+  it("autorise via l'user_id même si le chat_id n'est pas dans la liste (chat privé)", () => {
+    const privateMessage: TdMessage = { ...strangerMessage, chat_id: 111, sender_id: { _: 'messageSenderUser', user_id: 111 } }
     expect(isMessageAllowed(privateMessage, whitelist)).toBe(true)
+  })
+
+  it("n'autorise PAS via l'user_id de l'expéditeur dans un groupe non whitelisté (chat_id négatif)", () => {
+    // Un membre déjà whitelisté par ailleurs ne doit pas faire passer ses
+    // messages dans un groupe qui, lui, n'a jamais été approuvé.
+    const memberMessage: TdMessage = { ...strangerMessage, chat_id: -4004, sender_id: { _: 'messageSenderUser', user_id: 111 } }
+    expect(isMessageAllowed(memberMessage, whitelist)).toBe(false)
   })
 })
 
@@ -169,6 +188,7 @@ describe('mapUpdate', () => {
         text: 'Salut',
         time: expect.any(String),
         outgoing: false,
+        senderId: 111,
       },
     })
   })
@@ -232,15 +252,21 @@ describe('extractPendingCandidate', () => {
   it("retourne null si l'expéditeur est déjà autorisé par user_id (chat privé)", () => {
     const privateMessage: TdMessage = {
       ...strangerMessage,
-      chat_id: -3003,
+      chat_id: 111,
       sender_id: { _: 'messageSenderUser', user_id: 111 },
     }
     expect(extractPendingCandidate({ _: 'updateNewMessage', message: privateMessage }, whitelist)).toBeNull()
   })
 
-  it('retourne un candidat "user" pour un inconnu (messageSenderUser)', () => {
-    const result = extractPendingCandidate({ _: 'updateNewMessage', message: strangerMessage }, whitelist)
+  it('retourne un candidat "user" pour un inconnu en chat privé (messageSenderUser)', () => {
+    const result = extractPendingCandidate({ _: 'updateNewMessage', message: privateStrangerMessage }, whitelist)
     expect(result).toEqual({ kind: 'user', id: 999, name: 'Utilisateur 999', preview: 'Bonjour inconnu' })
+  })
+
+  it('retourne un candidat "chat" pour un groupe non whitelisté, même si l\'expéditeur est déjà whitelisté ailleurs', () => {
+    const memberMessage: TdMessage = { ...strangerMessage, chat_id: -4004, sender_id: { _: 'messageSenderUser', user_id: 111 } }
+    const result = extractPendingCandidate({ _: 'updateNewMessage', message: memberMessage }, whitelist)
+    expect(result).toEqual({ kind: 'chat', id: -4004, name: 'Discussion -4004', preview: 'Bonjour inconnu' })
   })
 
   it('retourne un candidat "chat" pour un envoi anonyme (messageSenderChat)', () => {

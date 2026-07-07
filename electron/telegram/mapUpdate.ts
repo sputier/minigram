@@ -336,10 +336,23 @@ export function isChatObjectAllowed(chat: TdChat, whitelist: Whitelist): boolean
   return false
 }
 
+// En TDLib, un chat privé a un chat_id strictement positif, égal à l'user_id
+// du correspondant ; les groupes/supergroupes/canaux ont un chat_id négatif.
+// On s'en sert pour ne jamais laisser le check "expéditeur whitelisté"
+// s'appliquer à un groupe : sinon, un membre déjà whitelisté ailleurs (contact
+// privé, ou membre d'un AUTRE groupe déjà approuvé) ferait passer ses
+// messages dans CE groupe-ci alors que le groupe lui-même n'a jamais été
+// approuvé par le parent — une vraie fuite de la whitelist, pas juste un
+// souci d'UX.
+function isPrivateChatId(chatId: number): boolean {
+  return chatId > 0
+}
+
 export function isMessageAllowed(message: TdMessage, whitelist: Whitelist): boolean {
   if (isChatAllowed(whitelist, message.chat_id)) return true
-  const userId = senderUserId(message)
-  return userId !== undefined && isUserAllowed(whitelist, userId)
+  if (!isPrivateChatId(message.chat_id)) return false
+  const userId = senderUserId(message) ?? message.chat_id
+  return isUserAllowed(whitelist, userId)
 }
 
 // Détecte qu'updateNewMessage vient d'un chat/expéditeur hors whitelist, pour
@@ -349,6 +362,11 @@ export function isMessageAllowed(message: TdMessage, whitelist: Whitelist): bool
 // glue. Volontairement limité à updateNewMessage : updateMessageSendSucceeded
 // est l'écho des messages sortants de l'enfant (déjà gatés par sendMessage),
 // et updateChatLastMessage est un doublon du même événement.
+//
+// Le kind ('user' vs 'chat') dépend du TYPE de chat, pas de qui a envoyé le
+// message : dans un groupe, l'expéditeur est TOUJOURS un utilisateur, donc se
+// baser sur senderUserId ferait remonter une demande "utilisateur" par membre
+// et ne proposerait jamais le groupe lui-même à l'approbation.
 export function extractPendingCandidate(update: TdUpdate, whitelist: Whitelist): PendingCandidate | null {
   if (update._ !== 'updateNewMessage') return null
   const message = (update as { message?: TdMessage }).message
@@ -356,9 +374,9 @@ export function extractPendingCandidate(update: TdUpdate, whitelist: Whitelist):
   if (isMessageAllowed(message, whitelist)) return null
 
   const preview = extractPreviewText(message.content)
-  const userId = senderUserId(message)
 
-  if (userId !== undefined) {
+  if (isPrivateChatId(message.chat_id)) {
+    const userId = senderUserId(message) ?? message.chat_id
     return { kind: 'user', id: userId, name: `Utilisateur ${userId}`, preview }
   }
   return { kind: 'chat', id: message.chat_id, name: `Discussion ${message.chat_id}`, preview }
