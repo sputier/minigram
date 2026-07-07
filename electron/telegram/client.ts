@@ -63,7 +63,26 @@ import {
   type UiSelf,
 } from './mapUpdate'
 
-tdl.configure({ tdjson: getTdjson() })
+// require.resolve() (utilisé en interne par getTdjson()) renvoie un chemin
+// contenant "app.asar" même pour un fichier listé dans asarUnpack — la
+// résolution de module est transparente via le fs patché d'Electron, qui
+// traite l'archive comme un dossier normal. Mais tdjson.dll n'est pas chargé
+// via require() : le binding natif tdl.node appelle LoadLibraryW directement
+// sur ce chemin, en dehors de toute virtualisation Electron. Sur un vrai
+// LoadLibraryW, "...\app.asar\..." n'existe pas (l'asar est un seul fichier
+// opaque) → échec silencieux avec Win32 error 126 ("module introuvable"),
+// alors que le vrai fichier a bien été extrait sur disque dans
+// "...\app.asar.unpacked\...". On corrige donc le chemin nous-mêmes avant de
+// le passer à tdl. No-op en dev (pas d'asar, la chaîne ne contient pas
+// "app.asar").
+function resolveTdjsonPath(): string {
+  const raw = getTdjson()
+  const asarDir = `${path.sep}app.asar${path.sep}`
+  const unpackedDir = `${path.sep}app.asar.unpacked${path.sep}`
+  return raw.includes(asarDir) ? raw.replace(asarDir, unpackedDir) : raw
+}
+
+tdl.configure({ tdjson: resolveTdjsonPath() })
 
 export type AuthState =
   | { step: 'idle' }
