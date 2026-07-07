@@ -2,7 +2,9 @@ import 'dotenv/config'
 import { app, BrowserWindow, globalShortcut, ipcMain, Notification, protocol } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import fs from 'node:fs/promises'
+import fsSync from 'node:fs'
 import path from 'node:path'
+import util from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { checkAdminPassword } from './admin/authGate'
 import {
@@ -104,7 +106,45 @@ function broadcastSyncProgress(progress: SyncProgress) {
   win?.webContents.send('tg:sync-progress', progress)
 }
 
+// DevTools sont désactivés en prod (non négociable — l'enfant ne doit jamais
+// pouvoir inspecter/manipuler le renderer). Seul canal de diagnostic restant :
+// tout console.log/warn/error du process main est aussi écrit dans un fichier
+// texte, consultable avec n'importe quel éditeur, sans jamais exposer de
+// console interactive dans l'app.
+function setupFileLogging(): void {
+  const logDir = path.join(app.getPath('userData'), 'logs')
+  fsSync.mkdirSync(logDir, { recursive: true })
+  const logPath = path.join(logDir, 'main.log')
+
+  // Évite une croissance illimitée du fichier au fil des mois d'usage.
+  try {
+    if (fsSync.statSync(logPath).size > 5 * 1024 * 1024) {
+      fsSync.truncateSync(logPath, 0)
+    }
+  } catch {
+    // Le fichier n'existe pas encore au tout premier lancement — rien à faire.
+  }
+
+  const stream = fsSync.createWriteStream(logPath, { flags: 'a' })
+  const original = { log: console.log, warn: console.warn, error: console.error }
+
+  function wrap(level: string, original: (...args: unknown[]) => void) {
+    return (...args: unknown[]) => {
+      original(...args)
+      const formatted = args.map((a) => (typeof a === 'string' ? a : util.inspect(a))).join(' ')
+      stream.write(`${new Date().toISOString()} [${level}] ${formatted}\n`)
+    }
+  }
+
+  console.log = wrap('LOG', original.log)
+  console.warn = wrap('WARN', original.warn)
+  console.error = wrap('ERROR', original.error)
+
+  console.log(`[main] démarrage MiniGram — logs écrits dans ${logPath}`)
+}
+
 app.whenReady().then(() => {
+  setupFileLogging()
   createWindow()
 
   // En production seulement (VITE_DEV_SERVER_URL absent) : vérifie si une
