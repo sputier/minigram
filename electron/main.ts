@@ -127,7 +127,7 @@ function setupFileLogging(): void {
   }
 
   const stream = fsSync.createWriteStream(logPath, { flags: 'a' })
-  const original = { log: console.log, warn: console.warn, error: console.error }
+  const original = { log: console.log, info: console.info, warn: console.warn, error: console.error }
 
   function wrap(level: string, original: (...args: unknown[]) => void) {
     return (...args: unknown[]) => {
@@ -138,6 +138,14 @@ function setupFileLogging(): void {
   }
 
   console.log = wrap('LOG', original.log)
+  // console.info n'est PAS un simple alias de console.log une fois réassigné
+  // (les deux pointent vers la même fonction native à l'origine, mais
+  // remplacer console.log ne change pas console.info) — electron-updater
+  // journalise la quasi-totalité de son cycle de vie (vérif, version
+  // trouvée, progression et fin de téléchargement) via console.info. Sans ce
+  // wrapper, ces messages ne vont nulle part dans une app packagée (pas de
+  // console attachée) et le fichier de log ne montre que les warn/error.
+  console.info = wrap('INFO', original.info)
   console.warn = wrap('WARN', original.warn)
   console.error = wrap('ERROR', original.error)
 
@@ -153,6 +161,15 @@ app.whenReady().then(() => {
   // La mise à jour est téléchargée en arrière-plan ; l'installation se fait
   // au prochain redémarrage de l'app.
   if (!VITE_DEV_SERVER_URL) {
+    // autoUpdater hérite d'EventEmitter et émet 'error' sur tout échec
+    // (réseau, signature...) — sans listener, Node throw au lieu d'ignorer,
+    // ce qui peut interrompre silencieusement tout le flux de mise à jour.
+    autoUpdater.on('error', (err) => {
+      console.error('[autoUpdater] erreur de mise à jour', err)
+    })
+    autoUpdater.on('update-downloaded', (info) => {
+      console.log(`[autoUpdater] mise à jour ${info.version} téléchargée, installation au prochain redémarrage`)
+    })
     autoUpdater.checkForUpdatesAndNotify()
   }
 
