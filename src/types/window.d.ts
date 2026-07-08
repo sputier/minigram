@@ -34,6 +34,7 @@ declare global {
       openPrivateChat: (userId: number) => Promise<UiChat | null>
       openChat: (chatId: number) => Promise<void>
       closeChat: (chatId: number) => Promise<void>
+      viewMessages: (chatId: number, messageIds: number[]) => Promise<void>
       onFocusChat: (cb: (chatId: number) => void) => Unsubscribe
     }
   }

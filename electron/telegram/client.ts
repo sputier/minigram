@@ -124,6 +124,8 @@ let onAuthStateBroadcast: (state: AuthState) => void = () => {}
 let onMappedUpdate: (update: MappedUpdate) => void = () => {}
 let onMediaReady: (fileId: number) => void = () => {}
 let onSyncProgressChange: (progress: SyncProgress) => void = () => {}
+let onChatsChangedBroadcast: (chats: UiChat[]) => void = () => {}
+let chatsRefreshPending = false
 
 // Le renderer peut monter son listener onAuthState après qu'un état ait déjà
 // été émis (ex: authorizationStateReady arrive très vite si la session est
@@ -158,6 +160,7 @@ export interface StartClientOptions {
   onUpdate: (update: MappedUpdate) => void
   onMediaReady?: (fileId: number) => void
   onSyncProgress?: (progress: SyncProgress) => void
+  onChatsChanged?: (chats: UiChat[]) => void
 }
 
 export function startClient(options: StartClientOptions): void {
@@ -165,6 +168,7 @@ export function startClient(options: StartClientOptions): void {
   onMappedUpdate = options.onUpdate
   onMediaReady = options.onMediaReady ?? (() => {})
   onSyncProgressChange = options.onSyncProgress ?? (() => {})
+  onChatsChangedBroadcast = options.onChatsChanged ?? (() => {})
 
   whitelistPath = path.join(app.getPath('userData'), 'whitelist.json')
   ensureWhitelistFile(whitelistPath)
@@ -248,6 +252,21 @@ export function startClient(options: StartClientOptions): void {
       return
     }
 
+    // Watermark de lecture de NOS messages sortants par le correspondant —
+    // c'est ce qui permet d'afficher "lu" (double check) côté enfant sur ses
+    // propres messages envoyés. Même remarque que ci-dessus pour le cache.
+    if (raw._ === 'updateChatReadOutbox') {
+      const chatId = (raw as any).chat_id
+      if (typeof chatId === 'number' && allowedChatIdsCache.has(chatId)) {
+        onMappedUpdate({
+          kind: 'chat-read-outbox',
+          chatId,
+          lastReadOutboxMessageId: (raw as any).last_read_outbox_message_id ?? 0,
+        })
+      }
+      return
+    }
+
     // La whitelist peut être éditée par le parent pendant que l'app tourne.
     whitelist = loadWhitelist(whitelistPath)
 
@@ -257,6 +276,17 @@ export function startClient(options: StartClientOptions): void {
       if (mapped.kind === 'new-message') {
         const message = (raw as { message?: TdMessage }).message
         if (message) enqueueMediaForMessage(message, true)
+
+        // Premier message d'une discussion privée qui vient d'être créée
+        // côté TDLib (ex : premier message envoyé au fil privé d'un contact
+        // déjà whitelisté via un groupe, mais avec qui aucun 1-to-1 n'avait
+        // encore existé) : ce chat_id n'est jamais passé par getChats() côté
+        // renderer, donc il n'apparaît dans aucune liste tant qu'on ne
+        // rediffuse pas explicitement les chats à jour (même mécanisme que
+        // les actions admin approve/add-to-whitelist).
+        if (!allowedChatIdsCache.has(mapped.message.chatId)) {
+          void refreshChatsAfterNewChat()
+        }
       }
     }
 
@@ -666,6 +696,18 @@ export async function getChats(): Promise<UiChat[]> {
   return tdChats.map(mapChat)
 }
 
+async function refreshChatsAfterNewChat(): Promise<void> {
+  if (chatsRefreshPending) return
+  chatsRefreshPending = true
+  try {
+    onChatsChangedBroadcast(await getChats())
+  } catch (err) {
+    console.error('[telegram] rafraîchissement des chats après nouvelle discussion échoué', err)
+  } finally {
+    chatsRefreshPending = false
+  }
+}
+
 const HISTORY_PAGE_SIZE = 50
 const HISTORY_MAX_FETCHES = 5
 
@@ -745,14 +787,22 @@ export async function sendMessage(chatId: number, text: string): Promise<void> {
     throw new Error('Chat non autorisé')
   }
 
-  await client.invoke({
+  const sent = (await client.invoke({
     _: 'sendMessage',
     chat_id: chatId,
     input_message_content: {
       _: 'inputMessageText',
       text: { _: 'formattedText', text, entities: [] },
     },
-  })
+  })) as unknown as TdMessage
+
+  // TDLib répond immédiatement avec le message dans un état "en attente"
+  // (id temporaire) plutôt que d'attendre la confirmation serveur — on
+  // l'affiche donc tout de suite en "en cours d'envoi" au lieu d'attendre
+  // silencieusement updateMessageSendSucceeded/Failed, qui remplaceront
+  // ensuite ce message temporaire (mapUpdate renvoie replacesId=old_message_id
+  // pour retrouver et remplacer précisément cette entrée optimiste).
+  onMappedUpdate({ kind: 'new-message', message: { ...mapMessage(sent), status: 'sending' } })
 }
 
 export async function addReaction(chatId: number, messageId: number, emoji: string): Promise<void> {
@@ -922,5 +972,24 @@ export async function closeChat(chatId: number): Promise<void> {
     await client.invoke({ _: 'closeChat', chat_id: chatId })
   } catch (err) {
     console.error('[telegram] closeChat échoué pour', chatId, err)
+  }
+}
+
+// Sans cet appel, TDLib ne marque jamais les messages comme lus : openChat
+// seul ne fait qu'abonner le chat aux updates, il ne fait pas avancer le
+// curseur de lecture. force_read:true couvre aussi les contenus (vocaux,
+// vidéos) qui exigeraient normalement une lecture explicite avant d'être
+// comptés comme lus.
+export async function viewMessages(chatId: number, messageIds: number[]): Promise<void> {
+  if (!client || messageIds.length === 0) return
+  try {
+    await client.invoke({
+      _: 'viewMessages',
+      chat_id: chatId,
+      message_ids: messageIds,
+      force_read: true,
+    } as any)
+  } catch (err) {
+    console.error('[telegram] viewMessages échoué pour', chatId, err)
   }
 }

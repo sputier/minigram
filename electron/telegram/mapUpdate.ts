@@ -68,6 +68,7 @@ export interface TdChat {
   last_message?: TdMessage
   unread_count?: number
   last_read_inbox_message_id?: number
+  last_read_outbox_message_id?: number
   photo?: { small?: { id: number } }
 }
 
@@ -77,6 +78,7 @@ export type TdUpdate =
   | { _: 'updateUserStatus'; user_id: number; status?: { _: string } }
   | { _: 'updateConnectionState'; state?: { _: string } }
   | { _: 'updateMessageSendSucceeded'; message: TdMessage; old_message_id: number }
+  | { _: 'updateMessageSendFailed'; message: TdMessage; old_message_id: number }
   | { _: string; [key: string]: unknown }
 
 export type UiMediaKind = 'photo' | 'video' | 'voice' | 'document' | 'sticker' | 'animation'
@@ -105,6 +107,11 @@ export interface UiMessage {
   media?: UiMediaRef
   reactions?: UiReaction[]
   replyToMessageId?: number
+  // Uniquement pour l'affichage optimiste d'un message qu'on vient d'envoyer :
+  // absent pour tout message chargé depuis l'historique ou déjà confirmé —
+  // le statut "envoyé"/"lu" de ceux-là se déduit à l'affichage en comparant
+  // leur id à chat.lastReadOutboxMessageId (cf ChatView).
+  status?: 'sending' | 'failed'
 }
 
 export interface UiChat {
@@ -118,6 +125,7 @@ export interface UiChat {
   time: string
   unread?: number
   lastReadInboxMessageId?: number
+  lastReadOutboxMessageId?: number
 }
 
 export interface TdUser {
@@ -138,9 +146,10 @@ export interface UiSelf {
 
 export type MappedUpdate =
   | { kind: 'chat-last-message'; chatId: number; lastMessage: string; time: string }
-  | { kind: 'new-message'; message: UiMessage }
+  | { kind: 'new-message'; message: UiMessage; replacesId?: number }
   | { kind: 'message-reactions'; chatId: number; messageId: number; reactions: UiReaction[] }
   | { kind: 'chat-read-inbox'; chatId: number; lastReadInboxMessageId: number; unreadCount: number }
+  | { kind: 'chat-read-outbox'; chatId: number; lastReadOutboxMessageId: number }
   | { kind: 'connection-state'; state: string }
   | { kind: 'user-status'; userId: number; status: string }
 
@@ -322,6 +331,7 @@ export function mapChat(chat: TdChat): UiChat {
     time: chat.last_message ? formatTime(chat.last_message.date) : '',
     unread: chat.unread_count && chat.unread_count > 0 ? chat.unread_count : undefined,
     lastReadInboxMessageId: chat.last_read_inbox_message_id,
+    lastReadOutboxMessageId: chat.last_read_outbox_message_id,
   }
 }
 
@@ -401,7 +411,19 @@ export function mapUpdate(update: TdUpdate, whitelist: Whitelist): MappedUpdate 
         const message = (update as { message?: TdMessage }).message
         if (!message || typeof message.chat_id !== 'number') return null
         if (!isMessageAllowed(message, whitelist)) return null
-        return { kind: 'new-message', message: mapMessage(message) }
+        const oldMessageId = (update as { old_message_id?: number }).old_message_id
+        return { kind: 'new-message', message: mapMessage(message), replacesId: oldMessageId }
+      }
+      case 'updateMessageSendFailed': {
+        const message = (update as { message?: TdMessage }).message
+        if (!message || typeof message.chat_id !== 'number') return null
+        if (!isMessageAllowed(message, whitelist)) return null
+        const oldMessageId = (update as { old_message_id?: number }).old_message_id
+        return {
+          kind: 'new-message',
+          message: { ...mapMessage(message), status: 'failed' },
+          replacesId: oldMessageId,
+        }
       }
       case 'updateMessageInteractionInfo': {
         const chatId = (update as { chat_id?: number }).chat_id

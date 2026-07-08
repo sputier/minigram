@@ -85,14 +85,35 @@ export default function App() {
     prevActiveChatIdRef.current = activeChatId
   }, [activeChatId])
 
+  // openChat abonne juste le chat aux updates TDLib, ça ne fait pas avancer
+  // le curseur de lecture — sans viewMessages, l'expéditeur ne voit jamais
+  // ses messages passer en "lu". Se redéclenche à chaque nouveau message
+  // reçu tant que ce chat reste actif (la référence de activeMessages change).
+  const activeMessages = activeChatId !== undefined ? messagesByChat[activeChatId] : undefined
+  useEffect(() => {
+    if (activeChatId === undefined || !activeMessages || activeMessages.length === 0) return
+    void window.minigram.viewMessages(
+      activeChatId,
+      activeMessages.map((m) => m.id),
+    )
+  }, [activeChatId, activeMessages])
+
   useEffect(() => {
     return window.minigram.onUpdate((update) => {
       if (update.kind === 'new-message') {
         const { chatId } = update.message
-        setMessagesByChat((prev) => ({
-          ...prev,
-          [chatId]: [...(prev[chatId] ?? []), update.message],
-        }))
+        setMessagesByChat((prev) => {
+          const list = prev[chatId] ?? []
+          // replacesId : remplace le message optimiste "en cours d'envoi" par
+          // sa version confirmée/échouée (même message, id temporaire ->
+          // définitif). Sans ça, la confirmation d'un message qu'on vient
+          // d'envoyer nous-mêmes s'ajouterait en double au lieu de mettre à
+          // jour son statut.
+          const replaceId = update.replacesId ?? update.message.id
+          const idx = list.findIndex((m) => m.id === replaceId)
+          const next = idx === -1 ? [...list, update.message] : list.map((m, i) => (i === idx ? update.message : m))
+          return { ...prev, [chatId]: next }
+        })
         setChats((prev) =>
           prev.map((c) =>
             c.id === chatId ? { ...c, lastMessage: update.message.text, time: update.message.time } : c,
@@ -118,6 +139,12 @@ export default function App() {
             c.id === update.chatId
               ? { ...c, lastReadInboxMessageId: update.lastReadInboxMessageId, unread: update.unreadCount > 0 ? update.unreadCount : undefined }
               : c,
+          ),
+        )
+      } else if (update.kind === 'chat-read-outbox') {
+        setChats((prev) =>
+          prev.map((c) =>
+            c.id === update.chatId ? { ...c, lastReadOutboxMessageId: update.lastReadOutboxMessageId } : c,
           ),
         )
       }

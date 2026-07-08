@@ -32,6 +32,7 @@ export interface UiMessage {
   media?: UiMediaRef
   reactions?: UiReaction[]
   replyToMessageId?: number
+  status?: 'sending' | 'failed'
 }
 
 export interface UiChat {
@@ -45,6 +46,7 @@ export interface UiChat {
   time: string
   unread?: number
   lastReadInboxMessageId?: number
+  lastReadOutboxMessageId?: number
 }
 
 export interface UiSelf {
@@ -57,9 +59,10 @@ export interface UiSelf {
 
 export type MappedUpdate =
   | { kind: 'chat-last-message'; chatId: number; lastMessage: string; time: string }
-  | { kind: 'new-message'; message: UiMessage }
+  | { kind: 'new-message'; message: UiMessage; replacesId?: number }
   | { kind: 'message-reactions'; chatId: number; messageId: number; reactions: UiReaction[] }
   | { kind: 'chat-read-inbox'; chatId: number; lastReadInboxMessageId: number; unreadCount: number }
+  | { kind: 'chat-read-outbox'; chatId: number; lastReadOutboxMessageId: number }
   | { kind: 'connection-state'; state: string }
   | { kind: 'user-status'; userId: number; status: string }
 

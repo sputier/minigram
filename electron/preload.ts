@@ -35,6 +35,7 @@ export interface MinigramApi {
   openPrivateChat: (userId: number) => Promise<UiChat | null>
   openChat: (chatId: number) => Promise<void>
   closeChat: (chatId: number) => Promise<void>
+  viewMessages: (chatId: number, messageIds: number[]) => Promise<void>
   onFocusChat: (cb: (chatId: number) => void) => Unsubscribe
 }
 
@@ -92,6 +93,7 @@ const api: MinigramApi = {
   openPrivateChat: (userId) => ipcRenderer.invoke('tg:open-private-chat', userId),
   openChat: (chatId) => ipcRenderer.invoke('tg:open-chat', chatId),
   closeChat: (chatId) => ipcRenderer.invoke('tg:close-chat', chatId),
+  viewMessages: (chatId, messageIds) => ipcRenderer.invoke('tg:view-messages', chatId, messageIds),
   onFocusChat: (cb) => {
     const listener = (_event: Electron.IpcRendererEvent, chatId: number) => cb(chatId)
     ipcRenderer.on('tg:focus-chat', listener)

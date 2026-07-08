@@ -234,6 +234,30 @@ describe('mapUpdate', () => {
     expect(result).toEqual({ kind: 'connection-state', state: 'connectionStateReady' })
   })
 
+  it('mappe updateMessageSendSucceeded avec replacesId pour retrouver le message optimiste', () => {
+    const result = mapUpdate(
+      { _: 'updateMessageSendSucceeded', message: allowedGroupMessage, old_message_id: -1 },
+      whitelist,
+    )
+    expect(result).toMatchObject({ kind: 'new-message', replacesId: -1, message: { id: 1 } })
+  })
+
+  it('retourne null pour updateMessageSendSucceeded hors whitelist', () => {
+    const result = mapUpdate(
+      { _: 'updateMessageSendSucceeded', message: strangerMessage, old_message_id: -1 },
+      whitelist,
+    )
+    expect(result).toBeNull()
+  })
+
+  it('mappe updateMessageSendFailed avec status "failed" et replacesId', () => {
+    const result = mapUpdate(
+      { _: 'updateMessageSendFailed', message: allowedGroupMessage, old_message_id: -2 },
+      whitelist,
+    )
+    expect(result).toMatchObject({ kind: 'new-message', replacesId: -2, message: { id: 1, status: 'failed' } })
+  })
+
   it('ignore les types d\'update non gérés', () => {
     expect(mapUpdate({ _: 'updateSomethingElse' }, whitelist)).toBeNull()
   })
@@ -339,5 +363,10 @@ describe('chat-level filtering', () => {
   it('utilise un label descriptif pour un dernier message média sans légende', () => {
     const chatWithPhoto: TdChat = { ...groupChat, last_message: photoMessage }
     expect(mapChat(chatWithPhoto).lastMessage).toBe('📷 Photo')
+  })
+
+  it('reporte le watermark de lecture des messages sortants (last_read_outbox_message_id)', () => {
+    const chatWithOutbox: TdChat = { ...groupChat, last_read_outbox_message_id: 42 }
+    expect(mapChat(chatWithOutbox).lastReadOutboxMessageId).toBe(42)
   })
 })

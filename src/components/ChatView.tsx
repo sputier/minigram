@@ -327,6 +327,30 @@ function MediaBubbleContent({
   }
 }
 
+// Un message sortant sans `status` (chargé depuis l'historique, ou déjà
+// confirmé par updateMessageSendSucceeded) n'est jamais "en cours d'envoi" —
+// son statut "envoyé" vs "lu" se déduit en comparant son id au watermark de
+// lecture de nos messages par le correspondant (chat.lastReadOutboxMessageId,
+// alimenté par updateChatReadOutbox côté TDLib).
+function MessageStatusTick({ message, chat }: { message: UiMessage; chat: UiChat }) {
+  if (message.status === 'sending') {
+    return <span title="Envoi en cours">🕒</span>
+  }
+  if (message.status === 'failed') {
+    return (
+      <span className="text-red-400" title="Échec de l'envoi">
+        ⚠
+      </span>
+    )
+  }
+  const read = (chat.lastReadOutboxMessageId ?? 0) >= message.id
+  return (
+    <span className={read ? 'text-tg-accent' : ''} title={read ? 'Lu' : 'Envoyé'}>
+      {read ? '✓✓' : '✓'}
+    </span>
+  )
+}
+
 export default function ChatView({
   chat,
   messages,
@@ -572,7 +596,10 @@ export default function ChatView({
                       </div>
                     )}
                     {message.text && <div>{message.text}</div>}
-                    <div className="mt-1 text-right text-[10px] text-white/50">{message.time}</div>
+                    <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-white/50">
+                      <span>{message.time}</span>
+                      {outgoing && <MessageStatusTick message={message} chat={chat} />}
+                    </div>
                   </div>
                 )
               }

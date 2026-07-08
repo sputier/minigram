@@ -33,6 +33,7 @@ import {
   submitAuthCode,
   submitAuthPassword,
   submitPhoneNumber,
+  viewMessages,
   type AuthState,
   type SyncProgress,
   type UiUserAvatar,
@@ -257,6 +258,7 @@ app.whenReady().then(() => {
     onUpdate: broadcastUpdate,
     onMediaReady: broadcastMediaReady,
     onSyncProgress: broadcastSyncProgress,
+    onChatsChanged: broadcastChats,
   })
 })
 
@@ -318,6 +320,7 @@ ipcMain.handle('tg:remove-reaction', (_event, chatId: number, messageId: number,
 
 ipcMain.handle('tg:open-chat', (_event, chatId: number) => openChat(chatId))
 ipcMain.handle('tg:close-chat', (_event, chatId: number) => closeChat(chatId))
+ipcMain.handle('tg:view-messages', (_event, chatId: number, messageIds: number[]) => viewMessages(chatId, messageIds))
 
 ipcMain.handle('tg:get-group-members', (_event, chatId: number) => getGroupMembers(chatId))
 
